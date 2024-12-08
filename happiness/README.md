@@ -5,7 +5,7 @@ This analysis presents a comprehensive examination of the dataset through two co
 1. A creative quantum-temporal interpretation for innovative pattern discovery (My unique story-telling approach)
 2. A technical statistical analysis for rigorous data insights 
 
-## Quantum Temporal Analysis on the dataset  (My unique approach)
+## Quantum Temporal Analysis on the dataset  (My unique story-telling approach)
 Note: The following section reframes our technical findings through a **quantum-temporal lens** to explore innovative patterns and relationships in the data. Hope you enjoy the story!
 
 ### Temporal Reconnaissance Mission: The Chronicles of Life's Ladder in a Quantum Universe
@@ -164,3 +164,11 @@ With this report, stakeholders can gain insights into vital correlations, invest
 
 ### Cluster Analysis
 ![Cluster Analysis](cluster_analysis.png)
+
+
+### Statistical Summary
+![Statistical Summary](statistical_summary.png)
+
+
+### Categorical Analysis
+![Categorical Analysis](categorical_analysis.png)

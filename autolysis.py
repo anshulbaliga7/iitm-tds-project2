@@ -272,7 +272,7 @@ This analysis presents a comprehensive examination of the dataset through two co
 1. A creative quantum-temporal interpretation for innovative pattern discovery (My unique story-telling approach)
 2. A technical statistical analysis for rigorous data insights 
 
-## Quantum Temporal Analysis on the dataset  (My unique approach)
+## Quantum Temporal Analysis on the dataset  (My unique story-telling approach)
 Note: The following section reframes our technical findings through a **quantum-temporal lens** to explore innovative patterns and relationships in the data. Hope you enjoy the story!\n
 {creative_story}
 
@@ -287,16 +287,10 @@ Note: The following section reframes our technical findings through a **quantum-
                 # Write to single README file
                 with open(self.readme_path, 'w', encoding='utf-8') as f:
                     f.write(combined_story)
-                    
-                    # Add visualization references if they exist
-                    if os.path.exists('correlation_heatmap.png'):
-                        f.write('\n\n### Correlation Analysis\n![Correlation Heatmap](correlation_heatmap.png)\n')
-                    if os.path.exists('cluster_analysis.png'):
-                        f.write('\n\n### Cluster Analysis\n![Cluster Analysis](cluster_analysis.png)\n')
-                    if os.path.exists('statistical_summary.png'):
-                        f.write('\n\n### Statistical Summary\n![Statistical Summary](statistical_summary.png)\n')
-                    if os.path.exists('categorical_analysis.png'):
-                        f.write('\n\n### Categorical Analysis\n![Categorical Analysis](categorical_analysis.png)\n')
+                    f.write('\n\n### Correlation Analysis\n![Correlation Heatmap](correlation_heatmap.png)\n')
+                    f.write('\n\n### Cluster Analysis\n![Cluster Analysis](cluster_analysis.png)\n')
+                    f.write('\n\n### Statistical Summary\n![Statistical Summary](statistical_summary.png)\n')
+                    f.write('\n\n### Categorical Analysis\n![Categorical Analysis](categorical_analysis.png)\n')
                 return combined_story
             else:
                 raise Exception(f"API request failed with status code: {creative_response.status_code}")

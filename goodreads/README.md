@@ -5,8 +5,9 @@ This analysis presents a comprehensive examination of the dataset through two co
 1. A creative quantum-temporal interpretation for innovative pattern discovery (My unique story-telling approach)
 2. A technical statistical analysis for rigorous data insights 
 
-## Quantum Temporal Analysis on the dataset  (My unique approach)
+## Quantum Temporal Analysis on the dataset  (My unique story-telling approach)
 Note: The following section reframes our technical findings through a **quantum-temporal lens** to explore innovative patterns and relationships in the data. Hope you enjoy the story!
+
 **Temporal Reconnaissance Mission: The Dataset of Collective Thought**
 
 As we commence our journey into the narrative of the past, we step through the cosmic wormhole of time to a digital landscape of data, where the echoes of literary existence resonate in a vast expanse known as the “Dataset.” Our mission: to unravel the temporal narratives held within its 10,000 rows and 23 columns, a multitude of travelers existing in a commonly shared dimension.
