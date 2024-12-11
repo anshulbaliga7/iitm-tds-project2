@@ -6,8 +6,7 @@
 #   "matplotlib>=3.7.0",
 #   "openai>=1.0.0",
 #   "scikit-learn>=1.3.0",
-#   "requests>=2.31.0",
-#   "statsmodels>=0.13.0"
+#   "requests>=2.31.0"
 # ]
 # ///
 
@@ -304,37 +303,24 @@ Note: The following section reframes our technical findings through a **quantum-
     
     def analyze(self):
         """
-        Perform comprehensive data analysis with advanced techniques.
+        Perform comprehensive data analysis and generate story.
         """
         try:
-            # Suppress warnings
+            # Suppress sklearn warnings
             import warnings
             warnings.filterwarnings("ignore", category=FutureWarning)
             
-            # Create output directory
-            if not os.path.exists(self.output_dir):
-                os.makedirs(self.output_dir)
-            
-            # Dynamic analysis based on data characteristics
-            analysis_plan = self._determine_analysis_plan()
-            
-            # Core analyses
+            # Generate all analyses
             data_summary = self.generate_data_summary()
             correlation_results = self.detect_correlations()
             cluster_results = self.cluster_analysis(n_init=10)
             
-            # Advanced analyses based on data types
-            if analysis_plan['time_series']:
-                self._analyze_temporal_patterns()
-            if analysis_plan['categorical']:
-                self.analyze_categorical_patterns()
-            if analysis_plan['numerical']:
-                self._analyze_distributions()
-                self.visualize_statistics()
-                self._detect_anomalies()
-            
-            # Generate story
+            # Generate story (this will write to README.md)
             story = self.generate_story(data_summary, correlation_results, cluster_results)
+            
+            # Generate additional visualizations
+            self.analyze_categorical_patterns()
+            self.visualize_statistics()
             
             print(f"Analysis complete. Check {self.readme_path} and generated images.")
             return True
@@ -342,209 +328,97 @@ Note: The following section reframes our technical findings through a **quantum-
             print(f"Error during analysis: {e}")
             return False
     
-    def _determine_analysis_plan(self):
-        """
-        Dynamically determine appropriate analyses based on data characteristics.
-        """
-        plan = {
-            'time_series': False,
-            'categorical': False,
-            'numerical': False,
-            'advanced_stats': False
-        }
-        
-        # Check for datetime columns
-        date_pattern = r'\d{1,2}[-/]\w{3}[-/]\d{2,4}'
-        for col in self.df.columns:
-            if self.df[col].astype(str).str.match(date_pattern).any():
-                plan['time_series'] = True
-                break
-        
-        # Check for categorical columns
-        cat_cols = self.df.select_dtypes(include=['object', 'category']).columns
-        plan['categorical'] = len(cat_cols) > 0
-        
-        # Check for numerical columns
-        num_cols = self.df.select_dtypes(include=['float64', 'int64']).columns
-        plan['numerical'] = len(num_cols) > 0
-        
-        # Check if advanced statistical tests are appropriate
-        if len(num_cols) >= 2:
-            plan['advanced_stats'] = True
-        
-        return plan
-    
-    def _analyze_temporal_patterns(self):
-        """
-        Analyze temporal patterns in the data.
-        """
-        try:
-            date_cols = []
-            date_pattern = r'\d{1,2}[-/]\w{3}[-/]\d{2,4}'
-            
-            for col in self.df.columns:
-                if self.df[col].astype(str).str.match(date_pattern).any():
-                    date_cols.append(col)
-            
-            if not date_cols:
-                return None
-            
-            # Convert to datetime and analyze trends
-            for col in date_cols:
-                dates = pd.to_datetime(self.df[col], format='%d-%b-%y', errors='coerce')
-                if not dates.isna().all():
-                    self._analyze_single_temporal(dates, col)
-        except Exception as e:
-            print(f"Temporal analysis error: {e}")
-    
-    def _analyze_single_temporal(self, dates, col_name):
-        """
-        Analyze a single temporal column.
-        """
-        # Basic temporal statistics
-        stats = {
-            'min_date': dates.min(),
-            'max_date': dates.max(),
-            'date_range': (dates.max() - dates.min()).days,
-            'missing_dates': dates.isna().sum()
-        }
-        
-        # Time series decomposition if enough data points
-        if len(dates) > 50:
-            try:
-                from statsmodels.tsa.seasonal import seasonal_decompose
-                decomposition = seasonal_decompose(dates.value_counts().sort_index(), period=12)
-                
-                plt.figure(figsize=(6.4, 6.4))
-                plt.subplot(311)
-                decomposition.trend.plot()
-                plt.title('Trend')
-                plt.subplot(312)
-                decomposition.seasonal.plot()
-                plt.title('Seasonal')
-                plt.subplot(313)
-                decomposition.resid.plot()
-                plt.title('Residual')
-                
-                plt.tight_layout()
-                plt.savefig(os.path.join(self.output_dir, f'temporal_analysis_{col_name}.png'))
-                plt.close()
-            except Exception as e:
-                print(f"Time series decomposition error: {e}")
-    
-    def _detect_anomalies(self):
-        """
-        Detect anomalies using Isolation Forest.
-        """
-        from sklearn.ensemble import IsolationForest
-        
-        numeric_df = self.df.select_dtypes(include=['float64', 'int64'])
-        if len(numeric_df.columns) == 0:
-            return None
-        
-        # Fit isolation forest
-        iso_forest = IsolationForest(contamination=0.1, random_state=42)
-        anomalies = iso_forest.fit_predict(numeric_df)
-        
-        # Store anomaly information
-        self.anomalies = {
-            'total': sum(anomalies == -1),
-            'percentage': sum(anomalies == -1) / len(anomalies) * 100,
-            'columns': numeric_df.columns.tolist()
-        }
-    
     def _generate_dynamic_prompt(self, insights):
         """
-        Generate structured prompts for technical and creative narratives.
+        Generate a two-part prompt: technical analysis and creative narrative
         """
-        # Extract key metrics
+        # Extract metrics (keep existing code)
         total_rows = insights['data_overview']['size']
         missing_data = len(insights['missing_data'])
         num_clusters = insights['clusters']
         
-        # Build technical analysis prompt with clear structure
+        # Build the technical analysis prompt
         technical_prompt = {
             "model": "gpt-4o-mini",
             "messages": [
                 {
                     "role": "system",
-                    "content": """You are a data scientist creating a technical analysis report.
-                    Follow this structure:
-                    1. Data Overview: Describe the dataset scope and quality
-                    2. Key Patterns: Highlight significant correlations and distributions
-                    3. Cluster Analysis: Explain cluster characteristics and implications
-                    4. Statistical Insights: Present key statistical findings
-                    5. Recommendations: Suggest potential actions based on findings
-                    
-                    Use markdown formatting for clear organization. Create tables where appropriate.
-                    Emphasize significant findings with bold text."""
-                },
+                    "content": """You are a data scientist presenting a comprehensive analysis. 
+                    Focus on statistical insights, patterns, and create ASCII/Markdown tables and visualizations."""
+                },               
                 {
                     "role": "user",
                     "content": f"""
-                    Please analyze this dataset with the following details:
+                    Dataset Analysis Report:
                     
-                    Dataset Characteristics:
-                    - Size: {total_rows}
-                    - Missing Values: {missing_data} columns affected
-                    - Distinct Clusters: {num_clusters}
+                    Overview:
+                    - Dataset Size: {total_rows}
+                    - Missing Data Points: {missing_data}
+                    - Identified Clusters: {num_clusters}
                     
-                    Correlation Findings:                ```json
-                    {json.dumps(insights['correlations'], indent=2)}                ```
+                    Statistical Analysis:
+                    {json.dumps(insights.get('statistical_analysis', {}), indent=2)}
                     
-                    Data Quality Metrics:
-                    - Duplicates: {insights['data_overview']['duplicates']}
-                    - Memory Usage: {insights['data_overview']['memory']}
+                    Correlation Patterns:
+                    {json.dumps(insights.get('correlations', {}), indent=2)}
                     
-                    Missing Data Patterns:                ```json
-                    {json.dumps(insights['missing_data'], indent=2)}                ```
+                    Please provide a detailed technical analysis including:
+                    1. Dataset characteristics in a formatted Markdown table
+                    2. Statistical significance summary with ASCII box plots where relevant
+                    3. Correlation matrix as a formatted Markdown table
+                    4. Cluster analysis summary with text-based visualization
+                    5. Missing data patterns in tabular format
+                    6. Key metrics dashboard using ASCII/Unicode characters
+                    7. Potential biases or limitations
+                    8. Actionable recommendations
                     
-                    Focus on actionable insights and statistical significance.
-                    """
+                    Use these formatting elements:
+                    - Create tables using Markdown |---|---| syntax accurately
+                    - Use Unicode box-drawing characters for simple visualizations
+                    - Format key metrics in highlighted blocks
+                    - Use bullet points and numbered lists for clarity
+                    - Include ASCII art charts where appropriate
+                    
+                    Format everything in Markdown with clear sections."""
                 }
             ]
         }
         
-        # Build creative narrative prompt with quantum template
+        # Get technical analysis first
+        tech_response = self._make_api_call(technical_prompt)
+        if tech_response.status_code != 200:
+            raise Exception("Failed to generate technical analysis")
+        
+        technical_analysis = tech_response.json()['choices'][0]['message']['content']
+        
+        # Now generate the creative narrative
         creative_prompt = {
             "model": "gpt-4o-mini",
             "messages": [
                 {
                     "role": "system",
-                    "content": """You are a creative data storyteller using quantum mechanics metaphors.
-                    Structure your narrative as follows:
-                    1. Introduction: Set up the quantum analogy
-                    2. Data Patterns as Quantum States
-                    3. Correlations as Entanglement
-                    4. Clusters as Energy Levels
-                    5. Conclusion: Unifying Insights
-                    
-                    Use markdown for formatting. Make complex patterns relatable through metaphors."""
+                    "content": """You are a quantum historian from 2075. 
+                    Based on the technical analysis provided, create an engaging narrative."""
                 },
                 {
                     "role": "user",
                     "content": f"""
-                    Create a quantum-inspired narrative for this dataset:
+                    Technical Analysis:
+                    {technical_analysis}
                     
-                    Key Elements:
-                    - {total_rows}
-                    - {num_clusters} distinct clusters identified
-                    - Correlation patterns present
-                    - {missing_data} areas of uncertainty (missing data)
+                    Transform this into a quantum narrative following these directives:
+                    1. Frame data points as temporal travelers
+                    2. Present correlations as quantum entanglements
+                    3. Describe clusters as convergence points
+                    4. Maintain scientific accuracy while being creative
                     
-                    Quantum Template:
-                    {insights['quantum_template']}
-                    
-                    Technical Foundation:                ```json
-                    {json.dumps(insights['correlations'], indent=2)}                ```
-                    
-                    Emphasize the interconnections and emergent patterns in the data.
-                    """
+                    Use the existing quantum template format:
+                    {insights['quantum_template']}"""
                 }
             ]
         }
         
-        return technical_prompt, creative_prompt
+        return technical_analysis, creative_prompt
 
     
     def _make_api_call(self, prompt):
@@ -662,27 +536,6 @@ Note: The following section reframes our technical findings through a **quantum-
         - Present insights as revelations across time
         - Maintain scientific accuracy in creative narrative
         """
-
-    def _analyze_distributions(self):
-        """
-        Analyze and visualize distributions of numerical columns.
-        """
-        numeric_df = self.df.select_dtypes(include=['float64', 'int64'])
-        if len(numeric_df.columns) == 0:
-            return None
-        
-        # Create distribution plots
-        for col in numeric_df.columns:
-            plt.figure(figsize=(6.4, 4.8))
-            sns.histplot(numeric_df[col], kde=True, bins=30)
-            plt.title(f'Distribution of {col}')
-            plt.xlabel(col)
-            plt.ylabel('Frequency')
-            
-            # Save plot
-            dist_path = os.path.join(self.output_dir, f'distribution_{col}.png')
-            plt.savefig(dist_path, dpi=80, bbox_inches='tight')
-            plt.close()
 
 def _analyze_visualizationsyyy(self):
     """
