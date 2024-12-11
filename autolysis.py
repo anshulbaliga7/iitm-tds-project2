@@ -364,39 +364,43 @@ class DataAnalyzer:
             if creative_response.status_code == 200:
                 creative_story = creative_response.json()['choices'][0]['message']['content']
                 
-                # Create combined story
-                combined_story = f"""# From Numbers to Narratives: Revealing Data Secrets 
-## Anshul Ramdas Baliga, 22f3002743
+                # Combine both analyses with emphasis on key findings
+                combined_story = f"""# Data Analysis Report
+
 ## Executive Summary
 This analysis presents a comprehensive examination of the dataset through two complementary lenses:
-1. A creative quantum-temporal interpretation for innovative pattern discovery (My unique story-telling approach)
-2. A technical statistical analysis for rigorous data insights 
+1. A creative quantum-temporal interpretation for innovative pattern discovery.
+2. A technical statistical analysis for rigorous data insights.
 
-## Quantum Temporal Analysis on the dataset  (My unique story-telling approach)
-Note: The following section reframes our technical findings through a **quantum-temporal lens** to explore innovative patterns and relationships in the data. Hope you enjoy the story!\n
+## Key Findings
+- Significant correlations identified: {', '.join([f'{k}: {v}' for k, v in insights['correlations'].items() if v > 0.7])}
+- Clusters identified: {insights['clusters']}
+
+## Quantum Temporal Analysis
 {creative_story}
 
 ## Technical Analysis
 {technical_analysis}
----
 
----
 ## Visualizations
 """
+                # Add visualization references if they exist
+                if os.path.exists('correlation_heatmap.png'):
+                    combined_story += '\n\n### Correlation Analysis\n![Correlation Heatmap](correlation_heatmap.png)\n'
+                if os.path.exists('cluster_analysis.png'):
+                    combined_story += '\n\n### Cluster Analysis\n![Cluster Analysis](cluster_analysis.png)\n'
                 
-                # Write to single README file
-                with open(self.readme_path, 'w', encoding='utf-8') as f:
+                # Save the combined story
+                with open('README.md', 'w', encoding='utf-8') as f:
                     f.write(combined_story)
-                    f.write('\n\n### Correlation Analysis\n![Correlation Heatmap](correlation_heatmap.png)\n')
-                    f.write('\n\n### Cluster Analysis\n![Cluster Analysis](cluster_analysis.png)\n')
-                    f.write('\n\n### Statistical Summary\n![Statistical Summary](statistical_summary.png)\n')
-                    f.write('\n\n### Categorical Analysis\n![Categorical Analysis](categorical_analysis.png)\n')
+                
                 return combined_story
+
             else:
                 raise Exception(f"API request failed with status code: {creative_response.status_code}")
         except Exception as e:
-            print(f"Story generation error: {e}")
-            return "# Data Analysis Story\n\nUnable to generate narrative due to an error."
+            print(f"Error in story generation: {e}")
+            return "Error generating story."
     
     def analyze(self):
         """
