@@ -69,9 +69,6 @@ class DataAnalyzer:
         openai.api_base = "https://aiproxy.sanand.workers.dev/openai/v1"
         openai.api_key = os.environ["AIPROXY_TOKEN"]
         #openai.api_key = "eyJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6IjIyZjMwMDI3NDNAZHMuc3R1ZHkuaWl0bS5hYy5pbiJ9.i6MpRliZ3nPhSAQ_bOkOW-isk4R9iXZY3cM-3AuFi3o"
-        
-        # Set up README path in the output directory
-        self.readme_path = os.path.join(self.output_dir, 'README.md')
     
     def generate_data_summary(self):
         """
