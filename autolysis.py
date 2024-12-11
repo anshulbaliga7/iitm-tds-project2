@@ -163,12 +163,21 @@ class DataAnalyzer:
             print(f"Error generating data summary: {e}")
             return {"error": str(e)}
     
+    def _get_colorblind_palette(self):
+        """
+        Returns a colorblind-friendly palette for visualizations.
+        Based on Wong's Nature Methods 2011 color palette.
+        """
+        return {
+            'main_colors': ['#E69F00', '#56B4E9', '#009E73', '#F0E442', '#0072B2', '#D55E00', '#CC79A7'],
+            'sequential': sns.color_palette("YlOrRd", n_colors=9),
+            'diverging': sns.diverging_palette(220, 20, as_cmap=True),
+            'categorical': sns.color_palette("husl", 8)
+        }
+
     def detect_correlations(self):
         """
-        Detect and visualize correlations between numeric columns.
-        
-        Returns:
-            dict: Correlation matrix and visualization path
+        Detect and visualize correlations between numeric columns with enhanced styling.
         """
         numeric_df = self.df.select_dtypes(include=['float64', 'int64'])
         
@@ -178,14 +187,62 @@ class DataAnalyzer:
         # Compute correlation matrix
         corr_matrix = numeric_df.corr()
         
-        # Create correlation heatmap with 512x512 size
-        plt.figure(figsize=(6.4, 6.4))  # 6.4 inches = 512 pixels at 80 DPI
-        sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', center=0)
-        plt.title('Correlation Heatmap')
+        # Set style for better readability
+        plt.style.use('default')
+        
+        # Create correlation heatmap with enhanced styling
+        plt.figure(figsize=(6.4, 6.4))
+        
+        # Create mask for upper triangle
+        mask = np.triu(np.ones_like(corr_matrix), k=1)
+        
+        # Enhanced heatmap with better accessibility
+        sns.heatmap(corr_matrix, 
+                    mask=mask,
+                    annot=True,
+                    fmt='.2f',
+                    cmap=self._get_colorblind_palette()['diverging'],
+                    center=0,
+                    vmin=-1, 
+                    vmax=1,
+                    square=True,
+                    linewidths=0.5,
+                    cbar_kws={"shrink": .8,
+                             "label": "Correlation Coefficient",
+                             "format": "%.1f"})
+        
+        plt.title('Correlation Heatmap\nwith Significance Levels', pad=20)
+        
+        # Add correlation strength indicators
+        for i in range(len(corr_matrix)):
+            for j in range(i):
+                if not mask[i,j]:  # Only process visible cells
+                    corr_val = corr_matrix.iloc[i, j]
+                    if abs(corr_val) > 0.7:
+                        plt.text(j+0.5, i+0.5, '***', 
+                                ha='center', va='center', color='white')
+                    elif abs(corr_val) > 0.5:
+                        plt.text(j+0.5, i+0.5, '**', 
+                                ha='center', va='center', color='white')
+                    elif abs(corr_val) > 0.3:
+                        plt.text(j+0.5, i+0.5, '*', 
+                                ha='center', va='center', color='white')
+        
+        # Add legend for significance levels
+        legend_text = ('Significance Levels:\n'
+                      '*** |r| > 0.7 (Strong)\n'
+                      '**  |r| > 0.5 (Moderate)\n'
+                      '*   |r| > 0.3 (Weak)')
+        plt.text(1.15, 0.99, legend_text,
+                 transform=plt.gca().transAxes,
+                 bbox=dict(facecolor='white', edgecolor='gray', alpha=0.8),
+                 verticalalignment='top')
+        
         plt.tight_layout()
         corr_path = os.path.join(self.output_dir, 'correlation_heatmap.png')
-        plt.savefig(corr_path, dpi=80, bbox_inches='tight')
+        plt.savefig(corr_path, dpi=100, bbox_inches='tight', facecolor='white')
         plt.close()
+        
         return {
             "correlation_matrix": corr_matrix.to_dict(),
             "correlation_visualization": corr_path
