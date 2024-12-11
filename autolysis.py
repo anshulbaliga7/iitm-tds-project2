@@ -6,8 +6,7 @@
 #   "matplotlib>=3.7.0",
 #   "openai>=1.0.0",
 #   "scikit-learn>=1.3.0",
-#   "requests>=2.31.0",
-#   "statsmodels>=0.14.0"
+#   "requests>=2.31.0"
 # ]
 # ///
 
@@ -21,7 +20,6 @@ from scipy import stats
 import openai
 import requests
 import numpy as np
-import statsmodels.api as sm
 
 class DataAnalyzer:
     def __init__(self, csv_path):
@@ -34,11 +32,6 @@ class DataAnalyzer:
         # Validate input file
         if not os.path.exists(csv_path):
             raise FileNotFoundError(f"Input file {csv_path} not found")
-        
-        # Create output directory based on CSV filename
-        csv_basename = os.path.splitext(os.path.basename(csv_path))[0]
-        self.output_dir = os.path.join(os.path.dirname(csv_path), csv_basename)
-        os.makedirs(self.output_dir, exist_ok=True)
         
         # Try different encodings and handle empty files
         encodings = ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252']
@@ -68,8 +61,8 @@ class DataAnalyzer:
         openai.api_key = os.environ["AIPROXY_TOKEN"]
         #openai.api_key = "eyJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6IjIyZjMwMDI3NDNAZHMuc3R1ZHkuaWl0bS5hYy5pbiJ9.i6MpRliZ3nPhSAQ_bOkOW-isk4R9iXZY3cM-3AuFi3o"
         
-        # Set up README path in the output directory
-        self.readme_path = os.path.join(self.output_dir, 'README.md')
+        # Set up single README path
+        self.readme_path = os.path.join(os.path.dirname(csv_path), 'README.md')
     
     def generate_data_summary(self):
         """
@@ -163,21 +156,12 @@ class DataAnalyzer:
             print(f"Error generating data summary: {e}")
             return {"error": str(e)}
     
-    def _get_colorblind_palette(self):
-        """
-        Returns a colorblind-friendly palette for visualizations.
-        Based on Wong's Nature Methods 2011 color palette.
-        """
-        return {
-            'main_colors': ['#E69F00', '#56B4E9', '#009E73', '#F0E442', '#0072B2', '#D55E00', '#CC79A7'],
-            'sequential': sns.color_palette("YlOrRd", n_colors=9),
-            'diverging': sns.diverging_palette(220, 20, as_cmap=True),
-            'categorical': sns.color_palette("husl", 8)
-        }
-
     def detect_correlations(self):
         """
-        Detect and visualize correlations between numeric columns with enhanced styling.
+        Detect and visualize correlations between numeric columns.
+        
+        Returns:
+            dict: Correlation matrix and visualization path
         """
         numeric_df = self.df.select_dtypes(include=['float64', 'int64'])
         
@@ -187,62 +171,14 @@ class DataAnalyzer:
         # Compute correlation matrix
         corr_matrix = numeric_df.corr()
         
-        # Set style for better readability
-        plt.style.use('default')
-        
-        # Create correlation heatmap with enhanced styling
-        plt.figure(figsize=(6.4, 6.4))
-        
-        # Create mask for upper triangle
-        mask = np.triu(np.ones_like(corr_matrix), k=1)
-        
-        # Enhanced heatmap with better accessibility
-        sns.heatmap(corr_matrix, 
-                    mask=mask,
-                    annot=True,
-                    fmt='.2f',
-                    cmap=self._get_colorblind_palette()['diverging'],
-                    center=0,
-                    vmin=-1, 
-                    vmax=1,
-                    square=True,
-                    linewidths=0.5,
-                    cbar_kws={"shrink": .8,
-                             "label": "Correlation Coefficient",
-                             "format": "%.1f"})
-        
-        plt.title('Correlation Heatmap\nwith Significance Levels', pad=20)
-        
-        # Add correlation strength indicators
-        for i in range(len(corr_matrix)):
-            for j in range(i):
-                if not mask[i,j]:  # Only process visible cells
-                    corr_val = corr_matrix.iloc[i, j]
-                    if abs(corr_val) > 0.7:
-                        plt.text(j+0.5, i+0.5, '***', 
-                                ha='center', va='center', color='white')
-                    elif abs(corr_val) > 0.5:
-                        plt.text(j+0.5, i+0.5, '**', 
-                                ha='center', va='center', color='white')
-                    elif abs(corr_val) > 0.3:
-                        plt.text(j+0.5, i+0.5, '*', 
-                                ha='center', va='center', color='white')
-        
-        # Add legend for significance levels
-        legend_text = ('Significance Levels:\n'
-                      '*** |r| > 0.7 (Strong)\n'
-                      '**  |r| > 0.5 (Moderate)\n'
-                      '*   |r| > 0.3 (Weak)')
-        plt.text(1.15, 0.99, legend_text,
-                 transform=plt.gca().transAxes,
-                 bbox=dict(facecolor='white', edgecolor='gray', alpha=0.8),
-                 verticalalignment='top')
-        
+        # Create correlation heatmap with 512x512 size
+        plt.figure(figsize=(6.4, 6.4))  # 6.4 inches = 512 pixels at 80 DPI
+        sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', center=0)
+        plt.title('Correlation Heatmap')
         plt.tight_layout()
-        corr_path = os.path.join(self.output_dir, 'correlation_heatmap.png')
-        plt.savefig(corr_path, dpi=100, bbox_inches='tight', facecolor='white')
+        corr_path = os.path.join(os.path.dirname(self.readme_path), 'correlation_heatmap.png')
+        plt.savefig(corr_path, dpi=80, bbox_inches='tight')
         plt.close()
-        
         return {
             "correlation_matrix": corr_matrix.to_dict(),
             "correlation_visualization": corr_path
@@ -250,12 +186,14 @@ class DataAnalyzer:
 
     def cluster_analysis(self, n_init=10):
         """
-        Perform adaptive clustering analysis with dynamic technique selection.
+        Perform basic clustering analysis with preprocessing for missing values.
+        
+        Returns:
+            dict: Clustering results and visualization
         """
         from sklearn.preprocessing import StandardScaler
-        from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering
-        from sklearn.metrics import silhouette_score
-        from sklearn.decomposition import PCA
+        from sklearn.cluster import KMeans
+        from sklearn.impute import SimpleImputer
         
         # Select numeric columns
         numeric_df = self.df.select_dtypes(include=['float64', 'int64'])
@@ -263,79 +201,38 @@ class DataAnalyzer:
         if len(numeric_df.columns) < 2:
             return {"error": "Not enough numeric columns for clustering"}
         
-        # Handle missing values using iterative imputer for better accuracy
-        from sklearn.experimental import enable_iterative_imputer
-        from sklearn.impute import IterativeImputer
-        imputer = IterativeImputer(random_state=42)
+        # Handle missing values using mean imputation
+        imputer = SimpleImputer(strategy='mean')
         imputed_data = imputer.fit_transform(numeric_df)
         
         # Standardize features
         scaler = StandardScaler()
         scaled_data = scaler.fit_transform(imputed_data)
         
-        # Determine optimal number of clusters using silhouette analysis
-        silhouette_scores = []
-        K = range(2, 6)
-        for k in K:
-            kmeans = KMeans(n_clusters=k, random_state=42, n_init=n_init)
-            labels = kmeans.fit_predict(scaled_data)
-            score = silhouette_score(scaled_data, labels)
-            silhouette_scores.append(score)
+        # Perform K-means clustering
+        kmeans = KMeans(n_clusters=3, random_state=42, n_init=n_init)
+        clusters = kmeans.fit_predict(scaled_data)
         
-        optimal_clusters = K[np.argmax(silhouette_scores)]
+        # Visualize clusters using first two principal components
+        from sklearn.decomposition import PCA
         
-        # Try multiple clustering techniques
-        clustering_results = {}
-        
-        # K-Means
-        kmeans = KMeans(n_clusters=optimal_clusters, random_state=42, n_init=n_init)
-        kmeans_labels = kmeans.fit_predict(scaled_data)
-        clustering_results['kmeans'] = {
-            'labels': kmeans_labels,
-            'score': silhouette_score(scaled_data, kmeans_labels)
-        }
-        
-        # DBSCAN with adaptive eps
-        try:
-            from sklearn.neighbors import NearestNeighbors
-            nn = NearestNeighbors(n_neighbors=2)
-            nn_dist = nn.fit(scaled_data).kneighbors(scaled_data)[0]
-            eps = max(np.percentile(nn_dist[:, 1], 90), 0.1)  # Ensure minimum eps value
-            
-            dbscan = DBSCAN(eps=eps, min_samples=min(5, len(scaled_data) // 20))
-            dbscan_labels = dbscan.fit_predict(scaled_data)
-            if len(set(dbscan_labels)) > 1:  # Only calculate score if meaningful clusters found
-                clustering_results['dbscan'] = {
-                    'labels': dbscan_labels,
-                    'score': silhouette_score(scaled_data, dbscan_labels)
-                }
-        except Exception as e:
-            print(f"DBSCAN clustering failed: {e}")
-        
-        # Use best performing algorithm for visualization
-        best_algorithm = max(clustering_results.items(), key=lambda x: x[1]['score'])
-        clusters = best_algorithm[1]['labels']
-        
-        # PCA for visualization
         pca = PCA(n_components=2)
         pca_data = pca.fit_transform(scaled_data)
         
-        plt.figure(figsize=(6.4, 6.4))
+        plt.figure(figsize=(6.4, 6.4))  # 6.4 inches = 512 pixels at 80 DPI
         scatter = plt.scatter(pca_data[:, 0], pca_data[:, 1], c=clusters, cmap='viridis')
-        plt.title(f'Cluster Analysis using {best_algorithm[0].upper()}')
+        plt.title('Cluster Analysis')
         plt.xlabel('First Principal Component')
         plt.ylabel('Second Principal Component')
         plt.colorbar(scatter)
         
-        cluster_path = os.path.join(self.output_dir, 'cluster_analysis.png')
+        cluster_path = os.path.join(os.path.dirname(self.readme_path), 'cluster_analysis.png')
         plt.savefig(cluster_path, dpi=80, bbox_inches='tight')
         plt.close()
         
         return {
-            'cluster_labels': clusters.tolist(),
-            'cluster_visualization': cluster_path,
-            'optimal_clusters': optimal_clusters,
-            'algorithm_comparison': {k: v['score'] for k, v in clustering_results.items()}
+            "cluster_labels": clusters.tolist(),
+            "cluster_visualization": cluster_path
         }
     
     def generate_story(self, data_summary, correlation_results, cluster_results):
@@ -408,18 +305,12 @@ Note: The following section reframes our technical findings through a **quantum-
             import warnings
             warnings.filterwarnings("ignore", category=FutureWarning)
             
-            # Generate basic analyses
+            # Generate all analyses
             data_summary = self.generate_data_summary()
             correlation_results = self.detect_correlations()
             cluster_results = self.cluster_analysis(n_init=10)
             
-            # Generate advanced statistical analysis
-            advanced_stats = self.advanced_statistical_analysis()
-            
-            # Add advanced analysis results to data summary
-            data_summary['advanced_statistics'] = advanced_stats
-            
-            # Generate story with enhanced insights
+            # Generate story (this will write to README.md)
             story = self.generate_story(data_summary, correlation_results, cluster_results)
             
             # Generate additional visualizations
@@ -436,13 +327,10 @@ Note: The following section reframes our technical findings through a **quantum-
         """
         Generate a two-part prompt: technical analysis and creative narrative
         """
-        # Extract metrics
+        # Extract metrics (keep existing code)
         total_rows = insights['data_overview']['size']
         missing_data = len(insights['missing_data'])
         num_clusters = insights['clusters']
-        
-        # Extract advanced statistics if available
-        advanced_stats = insights.get('advanced_statistics', {})
         
         # Build the technical analysis prompt
         technical_prompt = {
@@ -463,11 +351,8 @@ Note: The following section reframes our technical findings through a **quantum-
                     - Missing Data Points: {missing_data}
                     - Identified Clusters: {num_clusters}
                     
-                    Advanced Statistical Analysis:
-                    - Distribution Fitting Results: {json.dumps({k: v['best_fitting_distribution'] for k, v in advanced_stats.items()}, indent=2)}
-                    - Stationarity Tests: {json.dumps({k: v['is_stationary'] for k, v in advanced_stats.items()}, indent=2)}
-                    - Outlier Analysis: {json.dumps({k: {'iqr_outliers': v['iqr_outliers'], 'z_score_outliers': v['z_score_outliers']} for k, v in advanced_stats.items()}, indent=2)}
-                    - Distribution Characteristics: {json.dumps({k: {'skewness': v['skewness'], 'kurtosis': v['kurtosis']} for k, v in advanced_stats.items()}, indent=2)}
+                    Statistical Analysis:
+                    {json.dumps(insights.get('statistical_analysis', {}), indent=2)}
                     
                     Correlation Patterns:
                     {json.dumps(insights.get('correlations', {}), indent=2)}
@@ -479,11 +364,8 @@ Note: The following section reframes our technical findings through a **quantum-
                     4. Cluster analysis summary with text-based visualization
                     5. Missing data patterns in tabular format
                     6. Key metrics dashboard using ASCII/Unicode characters
-                    7. Distribution fitting analysis and implications
-                    8. Outlier analysis and impact assessment
-                    9. Stationarity test results and their significance
-                    10. Potential biases or limitations
-                    11. Actionable recommendations based on advanced statistics
+                    7. Potential biases or limitations
+                    8. Actionable recommendations
                     
                     Use these formatting elements:
                     - Create tables using Markdown |---|---| syntax accurately
@@ -504,7 +386,7 @@ Note: The following section reframes our technical findings through a **quantum-
         
         technical_analysis = tech_response.json()['choices'][0]['message']['content']
         
-        # Now generate the creative narrative with enhanced insights
+        # Now generate the creative narrative
         creative_prompt = {
             "model": "gpt-4o-mini",
             "messages": [
@@ -523,10 +405,7 @@ Note: The following section reframes our technical findings through a **quantum-
                     1. Frame data points as temporal travelers
                     2. Present correlations as quantum entanglements
                     3. Describe clusters as convergence points
-                    4. Interpret distribution patterns as temporal waves
-                    5. Frame outliers as temporal anomalies
-                    6. Describe stationarity as temporal stability
-                    7. Maintain scientific accuracy while being creative
+                    4. Maintain scientific accuracy while being creative
                     
                     Use the existing quantum template format:
                     {insights['quantum_template']}"""
@@ -564,144 +443,79 @@ Note: The following section reframes our technical findings through a **quantum-
     def visualize_statistics(self):
         """
         Create statistical summary visualizations including box plots
-        and violin plots for numeric columns, with enhanced styling and context.
+        and violin plots for numeric columns, optimized for small images.
         """
         numeric_df = self.df.select_dtypes(include=['float64', 'int64'])
         if len(numeric_df.columns) == 0:
             return None
         
-        # Set style for better readability
-        plt.style.use('default')  # Reset to default style first
-        sns.set_theme(style="whitegrid")  # Use seaborn's whitegrid theme
-        sns.set_palette("husl")
-        
-        # Create figure with two rows: box plots and violin plots
+        # Create figure with two rows: box plots and violin plots, optimized for 512x512 px
         fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, 
-                                      figsize=(8, 10))
+                                      figsize=(6.4, 6.4))  # 6.4 inches = 512 pixels at 80 DPI
         
-        # Box plots with enhanced styling
-        sns.boxplot(data=numeric_df, ax=ax1, whis=1.5)
-        ax1.set_title('Distribution of Numeric Variables\n(Box Plots)', pad=20)
-        ax1.set_xlabel('Variables', labelpad=10)
-        ax1.set_ylabel('Values', labelpad=10)
-        ax1.tick_params(axis='x', rotation=45, labelsize=8)
+        # Box plots
+        sns.boxplot(data=numeric_df, ax=ax1)
+        ax1.set_title('Box Plots of Numeric Variables')
+        ax1.tick_params(axis='x', rotation=45)
         
-        # Add explanation text for box plot
-        box_text = "Box Plot Legend:\n⎯ Max\n▢ Q3\n— Median\n▢ Q1\n⎯ Min\n• Outliers"
-        ax1.text(1.15, 0.5, box_text, transform=ax1.transAxes, 
-                 bbox=dict(facecolor='white', alpha=0.8, edgecolor='gray'),
-                 verticalalignment='center')
-        
-        # Violin plots with enhanced styling
-        sns.violinplot(data=numeric_df, ax=ax2, inner='quartile')
-        ax2.set_title('Distribution Shape of Numeric Variables\n(Violin Plots)', pad=20)
-        ax2.set_xlabel('Variables', labelpad=10)
-        ax2.set_ylabel('Values', labelpad=10)
-        ax2.tick_params(axis='x', rotation=45, labelsize=8)
-        
-        # Add explanation text for violin plot
-        violin_text = "Violin Plot Shows:\n- Distribution shape\n- Data density\n- Quartiles\n- Full data range"
-        ax2.text(1.15, 0.5, violin_text, transform=ax2.transAxes,
-                 bbox=dict(facecolor='white', alpha=0.8, edgecolor='gray'),
-                 verticalalignment='center')
+        # Violin plots
+        sns.violinplot(data=numeric_df, ax=ax2)
+        ax2.set_title('Violin Plots of Numeric Variables')
+        ax2.tick_params(axis='x', rotation=45)
         
         plt.tight_layout()
-        stats_path = os.path.join(self.output_dir, 'statistical_summary.png')
-        plt.savefig(stats_path, dpi=100, bbox_inches='tight', facecolor='white')
+        stats_path = os.path.join(os.path.dirname(self.readme_path), 'statistical_summary.png')
+        plt.savefig(stats_path, dpi=80, bbox_inches='tight')  # Removed quality and format parameters
         plt.close()
         
         return stats_path
     
-    def _get_plot_settings(self):
-        """
-        Returns standardized plot settings for consistent visualization.
-        """
-        return {
-            'figsize': (8, 10),
-            'title_pad': 20,
-            'label_pad': 10,
-            'rotation': 45,
-            'fontsize': 8,
-            'dpi': 100,
-            'bbox_inches': 'tight',
-            'facecolor': 'white'
-        }
-
-    def _create_subplot_with_text(self, fig, gs, row, col_pos, text, title):
-        """
-        Helper method to create subplot with text.
-        """
-        ax = fig.add_subplot(gs[row, col_pos])
-        ax.text(0.5, 0.5, text,
-                ha='center', va='center', wrap=True)
-        if title:
-            ax.set_title(title)
-        return ax
-
-    def _plot_category_data(self, ax, value_counts, col_name):
-        """
-        Helper method to plot category data with consistent styling.
-        """
-        total = value_counts.sum()
-        percentages = (value_counts / total * 100).round(1)
-        
-        bars = sns.barplot(x=value_counts.values, 
-                          y=[str(x)[:20] for x in value_counts.index],
-                          ax=ax)
-        
-        # Add percentage labels
-        for i, (v, p) in enumerate(zip(value_counts.values, percentages)):
-            bars.text(v, i, f' {p}%', va='center')
-        
-        # Set titles and labels
-        ax.set_title(f'Top 5 Categories in\n{col_name[:25]}...' 
-                     if len(col_name) > 25 else f'Top 5 Categories in {col_name}',
-                     pad=self._get_plot_settings()['title_pad'])
-        ax.set_xlabel('Count', labelpad=self._get_plot_settings()['label_pad'])
-        
-        # Add total count
-        ax.text(0.5, -0.2, f'Total unique values: {self.df[col_name].nunique()}',
-                ha='center', transform=ax.transAxes, style='italic')
-
     def analyze_categorical_patterns(self):
         """
-        Analyze and visualize patterns in categorical columns with enhanced context.
+        Analyze and visualize patterns in categorical columns.
+        
+        Returns:
+            str: Path to saved visualization
         """
         cat_cols = self.df.select_dtypes(include=['object', 'category']).columns
         if len(cat_cols) == 0:
             return None
         
+        # Select top 4 categorical columns (reduced from 6 to fit better in 512x512)
         plot_cols = cat_cols[:4]
-        if not plot_cols.any():
+        n_cols = len(plot_cols)
+        
+        if n_cols == 0:
             return None
         
-        settings = self._get_plot_settings()
-        fig = plt.figure(figsize=settings['figsize'])
-        gs = fig.add_gridspec(2, 2, hspace=0.4, wspace=0.3)
+        # Create 2x2 grid for better fit in 512x512
+        fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(6.4, 6.4))
+        axes = axes.flatten()
         
         for idx, col in enumerate(plot_cols):
             try:
-                row, col_pos = divmod(idx, 2)
+                # Get value counts and limit to top 5 (reduced from 10 for better readability)
                 value_counts = self.df[col].value_counts().head(5)
                 
                 if len(value_counts) > 0:
-                    ax = fig.add_subplot(gs[row, col_pos])
-                    self._plot_category_data(ax, value_counts, col)
-                
+                    sns.barplot(x=value_counts.values, 
+                              y=[str(x)[:20] for x in value_counts.index],  # Truncate to 20 chars
+                              ax=axes[idx])
+                    
+                    axes[idx].set_title(f'Top 5 in {col[:15]}...' if len(col) > 15 else f'Top 5 in {col}')
+                    axes[idx].set_xlabel('Count')
             except Exception as e:
-                error_text = f'Could not plot {col}\nError: {str(e)}'
-                self._create_subplot_with_text(fig, gs, *divmod(idx, 2), error_text, None)
+                print(f"Warning: Could not plot column {col}: {str(e)}")
+                axes[idx].text(0.5, 0.5, f'Could not plot {col}',
+                             ha='center', va='center')
         
-        # Add titles and save
-        fig.suptitle('Distribution of Top Categories in Categorical Variables\n', 
-                     fontsize=14, y=1.02)
-        fig.text(0.5, -0.05, 
-                 'Note: Showing top 5 categories for each variable. Percentages indicate proportion of total values.',
-                 ha='center', style='italic', wrap=True)
+        # Remove empty subplots if any
+        for idx in range(len(plot_cols), len(axes)):
+            fig.delaxes(axes[idx])
         
-        cat_path = os.path.join(self.output_dir, 'categorical_analysis.png')
-        plt.savefig(cat_path, **{k: v for k, v in settings.items() 
-                                if k in ['dpi', 'bbox_inches', 'facecolor']})
+        plt.tight_layout()
+        cat_path = os.path.join(os.path.dirname(self.readme_path), 'categorical_analysis.png')
+        plt.savefig(cat_path, dpi=80, bbox_inches='tight')
         plt.close()
         
         return cat_path
@@ -717,64 +531,6 @@ Note: The following section reframes our technical findings through a **quantum-
         - Present insights as revelations across time
         - Maintain scientific accuracy in creative narrative
         """
-    
-    def advanced_statistical_analysis(self):
-        """
-        Perform advanced statistical analysis with hypothesis testing
-        and distribution fitting.
-        """
-        numeric_df = self.df.select_dtypes(include=['float64', 'int64'])
-        results = {}
-        
-        for column in numeric_df.columns:
-            data = numeric_df[column].dropna()
-            
-            # Distribution fitting
-            distributions = [
-                stats.norm, stats.gamma, stats.lognorm, 
-                stats.exponweib, stats.beta
-            ]
-            
-            best_dist = None
-            best_params = None
-            best_kstest = float('inf')
-            
-            for dist in distributions:
-                try:
-                    params = dist.fit(data)
-                    _, p_value = stats.kstest(data, dist.name, params)
-                    if p_value > best_kstest:
-                        best_dist = dist.name
-                        best_params = params
-                        best_kstest = p_value
-                except:
-                    continue
-            
-            # Outlier detection using IQR and Z-score
-            q1, q3 = np.percentile(data, [25, 75])
-            iqr = q3 - q1
-            iqr_outliers = ((data < (q1 - 1.5 * iqr)) | (data > (q3 + 1.5 * iqr))).sum()
-            
-            z_scores = np.abs(stats.zscore(data))
-            z_outliers = (z_scores > 3).sum()
-            
-            # Stationarity test
-            try:
-                adf_stat, adf_p = sm.tsa.stattools.adfuller(data)[:2]
-            except:
-                adf_stat, adf_p = None, None
-            
-            results[column] = {
-                'best_fitting_distribution': best_dist,
-                'distribution_p_value': best_kstest,
-                'iqr_outliers': iqr_outliers,
-                'z_score_outliers': z_outliers,
-                'is_stationary': adf_p < 0.05 if adf_p is not None else None,
-                'skewness': stats.skew(data),
-                'kurtosis': stats.kurtosis(data)
-            }
-        
-        return results
 
 def main():
     if len(sys.argv) < 2:
@@ -787,7 +543,6 @@ def main():
         analyzer = DataAnalyzer(csv_path)
         analyzer.analyze()
         print("Analysis complete. Check README.md and generated images.")
-        print("Output directory")
     except Exception as e:
         print(f"Error during analysis: {e}")
         sys.exit(1)
