@@ -22,8 +22,6 @@ import openai
 import requests
 import numpy as np
 import statsmodels.api as sm
-import base64
-from io import BytesIO
 
 class DataAnalyzer:
     def __init__(self, csv_path, output_dir=None):
@@ -341,138 +339,63 @@ class DataAnalyzer:
     
     def generate_story(self, data_summary, correlation_results, cluster_results):
         """
-        Generate a narrative story combining technical, creative, and visual analyses.
+        Generate a narrative story combining technical and creative analyses.
         """
         try:
-            print("Starting story generation...")
-            # Convert numpy types to native Python types for JSON serialization
-            def convert_to_serializable(obj):
-                if isinstance(obj, (np.int64, np.int32)):
-                    return int(obj)
-                elif isinstance(obj, (np.float64, np.float32)):
-                    return float(obj)
-                elif isinstance(obj, dict):
-                    return {k: convert_to_serializable(v) for k, v in obj.items()}
-                elif isinstance(obj, (list, tuple)):
-                    return [convert_to_serializable(i) for i in obj]
-                return obj
-
-            # Prepare analysis insights with type conversion
+            # Prepare analysis insights
             insights = {
                 "data_overview": {
                     "size": f"{data_summary['total_rows']} rows × {data_summary['total_columns']} columns",
                     "memory": data_summary['memory_usage'],
-                    "duplicates": convert_to_serializable(data_summary['duplicates'])
+                    "duplicates": data_summary['duplicates']
                 },
                 "quantum_template": self._get_quantum_template(),
-                "missing_data": {coll: convert_to_serializable(count) for coll, count in data_summary['missing_values'].items() if count > 0},
-                "correlations": convert_to_serializable(correlation_results.get('correlation_matrix', {})),
-                "clusters": convert_to_serializable(len(set(cluster_results.get('cluster_labels', []))) if 'cluster_labels' in cluster_results else 0)
+                "missing_data": {coll: count for coll, count in data_summary['missing_values'].items() if count > 0},
+                "correlations": correlation_results.get('correlation_matrix', {}),
+                "clusters": len(set(cluster_results.get('cluster_labels', []))) if 'cluster_labels' in cluster_results else 0
             }
             
-            print("Generated insights:", json.dumps(insights, indent=2))
+            # Get both technical and creative analyses
+            technical_analysis, creative_prompt = self._generate_dynamic_prompt(insights)
             
-            # Step 1: Get technical analysis
-            print("Generating technical analysis...")
-            try:
-                technical_analysis, creative_prompt = self._generate_dynamic_prompt(insights)
-                print("Technical analysis generated successfully")
-            except Exception as e:
-                print(f"Error in _generate_dynamic_prompt: {str(e)}")
-                print(f"Response status: {getattr(e, 'status_code', 'N/A')}")
-                print(f"Response content: {getattr(e, 'content', 'N/A')}")
-                raise
+            # Get creative narrative
+            creative_response = self._make_api_call(creative_prompt)
             
-            # Step 2: Analyze visualizations
-            print("Starting visualization analysis...")
-            visual_insights = {}
-            for viz_type, path in [
-                ('correlation', 'correlation_heatmap.png'),
-                ('cluster', 'cluster_analysis.png'),
-                ('statistical', 'statistical_summary.png'),
-                ('categorical', 'categorical_analysis.png')
-            ]:
-                try:
-                    if os.path.exists(os.path.join(self.output_dir, path)):
-                        print(f"Analyzing {viz_type} visualization...")
-                        visual_insights[viz_type] = self._analyze_visualization(
-                            os.path.join(self.output_dir, path), 
-                            viz_type
-                        )
-                        print(f"Successfully analyzed {viz_type}")
-                    else:
-                        print(f"Warning: {path} not found")
-                except Exception as e:
-                    print(f"Error analyzing {viz_type}: {str(e)}")
-                    visual_insights[viz_type] = f"Analysis failed: {str(e)}"
-            
-            # Step 3: Get creative narrative with visual insights
-            print("Generating creative narrative...")
-            creative_prompt['messages'][1]['content'] += f"\n\nVisual Analysis Insights:\n{json.dumps(visual_insights, indent=2)}"
-            
-            try:
-                creative_response = self._make_api_call(creative_prompt)
-                print(f"Creative response status: {creative_response.status_code}")
-                
-                if creative_response.status_code != 200:
-                    print(f"Creative response error content: {creative_response.text}")
-                    raise Exception(f"API request failed with status code: {creative_response.status_code}")
-                    
+            if creative_response.status_code == 200:
                 creative_story = creative_response.json()['choices'][0]['message']['content']
-                print("Successfully generated creative story")
                 
-                # Create combined story with visual insights
-                print("Creating combined story...")
+                # Create combined story
                 combined_story = f"""# From Numbers to Narratives: Revealing Data Secrets 
 ## Anshul Ramdas Baliga, 22f3002743
 ## Executive Summary
-This analysis presents a comprehensive examination of the dataset through three complementary lenses:
-1. A creative quantum-temporal interpretation for innovative pattern discovery
-2. A technical statistical analysis for rigorous data insights
-3. A visual pattern analysis for intuitive understanding
+This analysis presents a comprehensive examination of the dataset through two complementary lenses:
+1. A creative quantum-temporal interpretation for innovative pattern discovery (My unique story-telling approach)
+2. A technical statistical analysis for rigorous data insights 
 
-## Quantum Temporal Analysis
-Note: The following section reframes our technical findings through a **quantum-temporal lens** to explore innovative patterns and relationships in the data.\n
+## Quantum Temporal Analysis on the dataset  (My unique story-telling approach)
+Note: The following section reframes our technical findings through a **quantum-temporal lens** to explore innovative patterns and relationships in the data. Hope you enjoy the story!\n
 {creative_story}
 
 ## Technical Analysis
 {technical_analysis}
+---
 
-## Visual Insights
-### Correlation Analysis
-{visual_insights.get('correlation', 'Analysis not available')}
-![Correlation Heatmap](correlation_heatmap.png)
-
-### Cluster Analysis
-{visual_insights.get('cluster', 'Analysis not available')}
-![Cluster Analysis](cluster_analysis.png)
-
-### Statistical Summary
-{visual_insights.get('statistical', 'Analysis not available')}
-![Statistical Summary](statistical_summary.png)
-
-### Categorical Analysis
-{visual_insights.get('categorical', 'Analysis not available')}
-![Categorical Analysis](categorical_analysis.png)
+---
+## Visualizations
 """
                 
-                # Write to README file
-                print(f"Writing story to {self.readme_path}...")
+                # Write to single README file
                 with open(self.readme_path, 'w', encoding='utf-8') as f:
                     f.write(combined_story)
-                print("Story generation complete")
+                    f.write('\n\n### Correlation Analysis\n![Correlation Heatmap](correlation_heatmap.png)\n')
+                    f.write('\n\n### Cluster Analysis\n![Cluster Analysis](cluster_analysis.png)\n')
+                    f.write('\n\n### Statistical Summary\n![Statistical Summary](statistical_summary.png)\n')
+                    f.write('\n\n### Categorical Analysis\n![Categorical Analysis](categorical_analysis.png)\n')
                 return combined_story
-                
-            except Exception as e:
-                print(f"Error in creative narrative generation: {str(e)}")
-                print(f"Creative prompt content: {json.dumps(creative_prompt, indent=2)}")
-                raise
-                
+            else:
+                raise Exception(f"API request failed with status code: {creative_response.status_code}")
         except Exception as e:
-            print(f"Story generation error: {str(e)}")
-            print("Full error details:")
-            import traceback
-            traceback.print_exc()
+            print(f"Story generation error: {e}")
             return "# Data Analysis Story\n\nUnable to generate narrative due to an error."
     
     def analyze(self):
@@ -856,47 +779,6 @@ Note: The following section reframes our technical findings through a **quantum-
             }
         
         return results
-
-    def _encode_image(self, image_path):
-        """Convert image to base64 string."""
-        with open(image_path, 'rb') as image_file:
-            return base64.b64encode(image_file.read()).decode('utf-8')
-
-    def _analyze_visualization(self, image_path, image_type):
-        """
-        Analyze visualization using GPT-4-mini with vision capabilities.
-        """
-        base64_image = self._encode_image(image_path)
-        
-        vision_prompt = {
-            "model": "gpt-4o-mini",
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "You are a data visualization expert. Analyze the provided visualization and extract key insights."
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": f"Analyze this {image_type} visualization and provide 3-4 key insights. Focus on patterns, relationships, and notable findings."
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/png;base64,{base64_image}"
-                            }
-                        }
-                    ]
-                }
-            ]
-        }
-        
-        response = self._make_api_call(vision_prompt)
-        if response.status_code == 200:
-            return response.json()['choices'][0]['message']['content']
-        return f"Failed to analyze {image_type} visualization."
 
 def main():
     """
