@@ -787,6 +787,7 @@ def main():
         analyzer = DataAnalyzer(csv_path)
         analyzer.analyze()
         print("Analysis complete. Check README.md and generated images.")
+        print("Output directory")
     except Exception as e:
         print(f"Error during analysis: {e}")
         sys.exit(1)
