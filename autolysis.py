@@ -440,6 +440,7 @@ Note: The following section reframes our technical findings through a **quantum-
         total_rows = insights['data_overview']['size']
         missing_data = len(insights['missing_data'])
         num_clusters = insights['clusters']
+        advanced_stats = insights.get('advanced_statistics', {})
         
         # Build the technical analysis prompt with clear structure
         technical_prompt = {
@@ -447,8 +448,8 @@ Note: The following section reframes our technical findings through a **quantum-
             "messages": [
                 {
                     "role": "system",
-                    "content": """You are a data scientist presenting a concise analysis. 
-                    Focus on key insights and avoid unnecessary details."""
+                    "content": """You are a data scientist presenting a comprehensive analysis. 
+                    Focus on clear, concise insights with brief summaries preceding detailed explanations."""
                 },               
                 {
                     "role": "user",
@@ -456,14 +457,40 @@ Note: The following section reframes our technical findings through a **quantum-
                     Dataset Analysis Report:
                     
                     Overview:
-                    - Size: {total_rows} rows
-                    - Missing Data: {missing_data}
-                    - Clusters: {num_clusters}
+                    - Dataset Size: {total_rows}
+                    - Missing Data Points: {missing_data}
+                    - Identified Clusters: {num_clusters}
                     
-                    Key Insights:
-                    {json.dumps(insights.get('key_insights', {}), indent=2)}
+                    Advanced Statistical Analysis:
+                    - Distribution Fitting Results: {json.dumps({k: v['best_fitting_distribution'] for k, v in advanced_stats.items()}, indent=2)}
+                    - Stationarity Tests: {json.dumps({k: v['is_stationary'] for k, v in advanced_stats.items()}, indent=2)}
+                    - Outlier Analysis: {json.dumps({k: {'iqr_outliers': v['iqr_outliers'], 'z_score_outliers': v['z_score_outliers']} for k, v in advanced_stats.items()}, indent=2)}
+                    - Distribution Characteristics: {json.dumps({k: {'skewness': v['skewness'], 'kurtosis': v['kurtosis']} for k, v in advanced_stats.items()}, indent=2)}
                     
-                    Please summarize the key findings in Markdown."""
+                    Correlation Patterns:
+                    {json.dumps(insights.get('correlations', {}), indent=2)}
+                    
+                    Please provide a technical analysis with:
+                    1. Executive Summary (2-3 key findings)
+                    2. Detailed Analysis:
+                       - Dataset characteristics (table format)
+                       - Statistical significance summary
+                       - Correlation insights
+                       - Cluster analysis
+                       - Distribution patterns
+                       - Missing data impact
+                    3. Key Metrics Dashboard
+                    4. Limitations and Biases
+                    5. Actionable Recommendations
+                    
+                    Format Guidelines:
+                    - Start each section with a brief summary
+                    - Use tables for structured data
+                    - Include confidence levels for statistical claims
+                    - Highlight practical implications
+                    - Use bullet points for clarity
+                    
+                    Format in clear Markdown sections."""
                 }
             ]
         }
@@ -481,8 +508,8 @@ Note: The following section reframes our technical findings through a **quantum-
             "messages": [
                 {
                     "role": "system",
-                    "content": """You are a quantum historian from 2075. 
-                    Create a concise narrative based on the technical analysis provided."""
+                    "content": """You are a quantum historian from 2075, tasked with making data patterns 
+                    accessible through creative metaphors while maintaining statistical accuracy."""
                 },
                 {
                     "role": "user",
@@ -490,13 +517,23 @@ Note: The following section reframes our technical findings through a **quantum-
                     Technical Analysis:
                     {technical_analysis}
                     
-                    Transform this into a quantum narrative:
-                    1. Frame correlations as quantum entanglements.
-                    2. Describe clusters as convergence points.
-                    3. Highlight key findings and implications.
+                    Transform the key statistical findings into a quantum narrative:
+                    1. Frame significant correlations (|r| > 0.7) as quantum entanglements
+                    2. Present major clusters as temporal convergence points
+                    3. Describe strong distribution patterns as quantum waves
+                    4. Highlight statistical significance in temporal terms
+                    5. Connect each creative element to specific data points
+                    
+                    Structure:
+                    1. Brief introduction explaining the quantum-temporal framework
+                    2. Key findings with clear statistical backing
+                    3. Practical implications in both quantum and real-world terms
+                    4. Summary connecting creative elements to technical insights
                     
                     Use the quantum template format:
-                    {insights['quantum_template']}"""
+                    {insights['quantum_template']}
+                    
+                    Note: Maintain clear connections between metaphors and data."""
                 }
             ]
         }
