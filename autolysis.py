@@ -612,6 +612,57 @@ Note: The following section reframes our technical findings through a **quantum-
         
         return stats_path
     
+    def _get_plot_settings(self):
+        """
+        Returns standardized plot settings for consistent visualization.
+        """
+        return {
+            'figsize': (8, 10),
+            'title_pad': 20,
+            'label_pad': 10,
+            'rotation': 45,
+            'fontsize': 8,
+            'dpi': 100,
+            'bbox_inches': 'tight',
+            'facecolor': 'white'
+        }
+
+    def _create_subplot_with_text(self, fig, gs, row, col_pos, text, title):
+        """
+        Helper method to create subplot with text.
+        """
+        ax = fig.add_subplot(gs[row, col_pos])
+        ax.text(0.5, 0.5, text,
+                ha='center', va='center', wrap=True)
+        if title:
+            ax.set_title(title)
+        return ax
+
+    def _plot_category_data(self, ax, value_counts, col_name):
+        """
+        Helper method to plot category data with consistent styling.
+        """
+        total = value_counts.sum()
+        percentages = (value_counts / total * 100).round(1)
+        
+        bars = sns.barplot(x=value_counts.values, 
+                          y=[str(x)[:20] for x in value_counts.index],
+                          ax=ax)
+        
+        # Add percentage labels
+        for i, (v, p) in enumerate(zip(value_counts.values, percentages)):
+            bars.text(v, i, f' {p}%', va='center')
+        
+        # Set titles and labels
+        ax.set_title(f'Top 5 Categories in\n{col_name[:25]}...' 
+                     if len(col_name) > 25 else f'Top 5 Categories in {col_name}',
+                     pad=self._get_plot_settings()['title_pad'])
+        ax.set_xlabel('Count', labelpad=self._get_plot_settings()['label_pad'])
+        
+        # Add total count
+        ax.text(0.5, -0.2, f'Total unique values: {self.df[col_name].nunique()}',
+                ha='center', transform=ax.transAxes, style='italic')
+
     def analyze_categorical_patterns(self):
         """
         Analyze and visualize patterns in categorical columns with enhanced context.
@@ -620,72 +671,37 @@ Note: The following section reframes our technical findings through a **quantum-
         if len(cat_cols) == 0:
             return None
         
-        # Set style for better readability
-        plt.style.use('default')  # Reset to default style first
-        sns.set_theme(style="whitegrid")  # Use seaborn's whitegrid theme
-        sns.set_palette("husl")
-        
-        # Select top 4 categorical columns
         plot_cols = cat_cols[:4]
-        n_cols = len(plot_cols)
-        
-        if n_cols == 0:
+        if not plot_cols.any():
             return None
         
-        # Create 2x2 grid
-        fig = plt.figure(figsize=(12, 10))
+        settings = self._get_plot_settings()
+        fig = plt.figure(figsize=settings['figsize'])
         gs = fig.add_gridspec(2, 2, hspace=0.4, wspace=0.3)
         
         for idx, col in enumerate(plot_cols):
             try:
-                # Calculate row and column position
-                row = idx // 2
-                col_pos = idx % 2
-                
-                # Create subplot with specific position
-                ax = fig.add_subplot(gs[row, col_pos])
-                
-                # Get value counts and calculate percentages
+                row, col_pos = divmod(idx, 2)
                 value_counts = self.df[col].value_counts().head(5)
-                total = value_counts.sum()
-                percentages = (value_counts / total * 100).round(1)
                 
-                # Create bar plot
-                bars = sns.barplot(x=value_counts.values, 
-                                 y=[str(x)[:20] for x in value_counts.index],
-                                 ax=ax)
-                
-                # Add percentage labels on bars
-                for i, (v, p) in enumerate(zip(value_counts.values, percentages)):
-                    bars.text(v, i, f' {p}%', va='center')
-                
-                # Enhance title and labels
-                ax.set_title(f'Top 5 Categories in\n{col[:25]}...' if len(col) > 25 else f'Top 5 Categories in {col}',
-                            pad=20)
-                ax.set_xlabel('Count', labelpad=10)
-                
-                # Add total count in subtitle
-                ax.text(0.5, -0.2, f'Total unique values: {self.df[col].nunique()}',
-                       ha='center', transform=ax.transAxes, style='italic')
+                if len(value_counts) > 0:
+                    ax = fig.add_subplot(gs[row, col_pos])
+                    self._plot_category_data(ax, value_counts, col)
                 
             except Exception as e:
-                print(f"Warning: Could not plot column {col}: {str(e)}")
-                if idx < len(plot_cols):
-                    ax = fig.add_subplot(gs[row, col_pos])
-                    ax.text(0.5, 0.5, f'Could not plot {col}\nError: {str(e)}',
-                           ha='center', va='center', wrap=True)
+                error_text = f'Could not plot {col}\nError: {str(e)}'
+                self._create_subplot_with_text(fig, gs, *divmod(idx, 2), error_text, None)
         
-        # Add overall title
+        # Add titles and save
         fig.suptitle('Distribution of Top Categories in Categorical Variables\n', 
                      fontsize=14, y=1.02)
-        
-        # Add explanation text
         fig.text(0.5, -0.05, 
                  'Note: Showing top 5 categories for each variable. Percentages indicate proportion of total values.',
                  ha='center', style='italic', wrap=True)
         
         cat_path = os.path.join(self.output_dir, 'categorical_analysis.png')
-        plt.savefig(cat_path, dpi=100, bbox_inches='tight', facecolor='white')
+        plt.savefig(cat_path, **{k: v for k, v in settings.items() 
+                                if k in ['dpi', 'bbox_inches', 'facecolor']})
         plt.close()
         
         return cat_path
