@@ -6,7 +6,8 @@
 #   "matplotlib>=3.7.0",
 #   "openai>=1.0.0",
 #   "scikit-learn>=1.3.0",
-#   "requests>=2.31.0"
+#   "requests>=2.31.0",
+#   "statsmodels>=0.14.0"
 # ]
 # ///
 
@@ -20,6 +21,7 @@ from scipy import stats
 import openai
 import requests
 import numpy as np
+import statsmodels.api as sm
 
 class DataAnalyzer:
     def __init__(self, csv_path):
@@ -191,14 +193,12 @@ class DataAnalyzer:
 
     def cluster_analysis(self, n_init=10):
         """
-        Perform basic clustering analysis with preprocessing for missing values.
-        
-        Returns:
-            dict: Clustering results and visualization
+        Perform adaptive clustering analysis with dynamic technique selection.
         """
         from sklearn.preprocessing import StandardScaler
-        from sklearn.cluster import KMeans
-        from sklearn.impute import SimpleImputer
+        from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering
+        from sklearn.metrics import silhouette_score
+        from sklearn.decomposition import PCA
         
         # Select numeric columns
         numeric_df = self.df.select_dtypes(include=['float64', 'int64'])
@@ -206,27 +206,66 @@ class DataAnalyzer:
         if len(numeric_df.columns) < 2:
             return {"error": "Not enough numeric columns for clustering"}
         
-        # Handle missing values using mean imputation
-        imputer = SimpleImputer(strategy='mean')
+        # Handle missing values using iterative imputer for better accuracy
+        from sklearn.experimental import enable_iterative_imputer
+        from sklearn.impute import IterativeImputer
+        imputer = IterativeImputer(random_state=42)
         imputed_data = imputer.fit_transform(numeric_df)
         
         # Standardize features
         scaler = StandardScaler()
         scaled_data = scaler.fit_transform(imputed_data)
         
-        # Perform K-means clustering
-        kmeans = KMeans(n_clusters=3, random_state=42, n_init=n_init)
-        clusters = kmeans.fit_predict(scaled_data)
+        # Determine optimal number of clusters using silhouette analysis
+        silhouette_scores = []
+        K = range(2, 6)
+        for k in K:
+            kmeans = KMeans(n_clusters=k, random_state=42, n_init=n_init)
+            labels = kmeans.fit_predict(scaled_data)
+            score = silhouette_score(scaled_data, labels)
+            silhouette_scores.append(score)
         
-        # Visualize clusters using first two principal components
-        from sklearn.decomposition import PCA
+        optimal_clusters = K[np.argmax(silhouette_scores)]
         
+        # Try multiple clustering techniques
+        clustering_results = {}
+        
+        # K-Means
+        kmeans = KMeans(n_clusters=optimal_clusters, random_state=42, n_init=n_init)
+        kmeans_labels = kmeans.fit_predict(scaled_data)
+        clustering_results['kmeans'] = {
+            'labels': kmeans_labels,
+            'score': silhouette_score(scaled_data, kmeans_labels)
+        }
+        
+        # DBSCAN with adaptive eps
+        try:
+            from sklearn.neighbors import NearestNeighbors
+            nn = NearestNeighbors(n_neighbors=2)
+            nn_dist = nn.fit(scaled_data).kneighbors(scaled_data)[0]
+            eps = max(np.percentile(nn_dist[:, 1], 90), 0.1)  # Ensure minimum eps value
+            
+            dbscan = DBSCAN(eps=eps, min_samples=min(5, len(scaled_data) // 20))
+            dbscan_labels = dbscan.fit_predict(scaled_data)
+            if len(set(dbscan_labels)) > 1:  # Only calculate score if meaningful clusters found
+                clustering_results['dbscan'] = {
+                    'labels': dbscan_labels,
+                    'score': silhouette_score(scaled_data, dbscan_labels)
+                }
+        except Exception as e:
+            print(f"DBSCAN clustering failed: {e}")
+        
+        # Use best performing algorithm for visualization
+        best_algorithm = max(clustering_results.items(), key=lambda x: x[1]['score'])
+        clusters = best_algorithm[1]['labels']
+        
+        # PCA for visualization
         pca = PCA(n_components=2)
         pca_data = pca.fit_transform(scaled_data)
         
-        plt.figure(figsize=(6.4, 6.4))  # 6.4 inches = 512 pixels at 80 DPI
+        plt.figure(figsize=(6.4, 6.4))
         scatter = plt.scatter(pca_data[:, 0], pca_data[:, 1], c=clusters, cmap='viridis')
-        plt.title('Cluster Analysis')
+        plt.title(f'Cluster Analysis using {best_algorithm[0].upper()}')
         plt.xlabel('First Principal Component')
         plt.ylabel('Second Principal Component')
         plt.colorbar(scatter)
@@ -236,8 +275,10 @@ class DataAnalyzer:
         plt.close()
         
         return {
-            "cluster_labels": clusters.tolist(),
-            "cluster_visualization": cluster_path
+            'cluster_labels': clusters.tolist(),
+            'cluster_visualization': cluster_path,
+            'optimal_clusters': optimal_clusters,
+            'algorithm_comparison': {k: v['score'] for k, v in clustering_results.items()}
         }
     
     def generate_story(self, data_summary, correlation_results, cluster_results):
@@ -310,12 +351,18 @@ Note: The following section reframes our technical findings through a **quantum-
             import warnings
             warnings.filterwarnings("ignore", category=FutureWarning)
             
-            # Generate all analyses
+            # Generate basic analyses
             data_summary = self.generate_data_summary()
             correlation_results = self.detect_correlations()
             cluster_results = self.cluster_analysis(n_init=10)
             
-            # Generate story (this will write to README.md)
+            # Generate advanced statistical analysis
+            advanced_stats = self.advanced_statistical_analysis()
+            
+            # Add advanced analysis results to data summary
+            data_summary['advanced_statistics'] = advanced_stats
+            
+            # Generate story with enhanced insights
             story = self.generate_story(data_summary, correlation_results, cluster_results)
             
             # Generate additional visualizations
@@ -332,10 +379,13 @@ Note: The following section reframes our technical findings through a **quantum-
         """
         Generate a two-part prompt: technical analysis and creative narrative
         """
-        # Extract metrics (keep existing code)
+        # Extract metrics
         total_rows = insights['data_overview']['size']
         missing_data = len(insights['missing_data'])
         num_clusters = insights['clusters']
+        
+        # Extract advanced statistics if available
+        advanced_stats = insights.get('advanced_statistics', {})
         
         # Build the technical analysis prompt
         technical_prompt = {
@@ -356,8 +406,11 @@ Note: The following section reframes our technical findings through a **quantum-
                     - Missing Data Points: {missing_data}
                     - Identified Clusters: {num_clusters}
                     
-                    Statistical Analysis:
-                    {json.dumps(insights.get('statistical_analysis', {}), indent=2)}
+                    Advanced Statistical Analysis:
+                    - Distribution Fitting Results: {json.dumps({k: v['best_fitting_distribution'] for k, v in advanced_stats.items()}, indent=2)}
+                    - Stationarity Tests: {json.dumps({k: v['is_stationary'] for k, v in advanced_stats.items()}, indent=2)}
+                    - Outlier Analysis: {json.dumps({k: {'iqr_outliers': v['iqr_outliers'], 'z_score_outliers': v['z_score_outliers']} for k, v in advanced_stats.items()}, indent=2)}
+                    - Distribution Characteristics: {json.dumps({k: {'skewness': v['skewness'], 'kurtosis': v['kurtosis']} for k, v in advanced_stats.items()}, indent=2)}
                     
                     Correlation Patterns:
                     {json.dumps(insights.get('correlations', {}), indent=2)}
@@ -369,8 +422,11 @@ Note: The following section reframes our technical findings through a **quantum-
                     4. Cluster analysis summary with text-based visualization
                     5. Missing data patterns in tabular format
                     6. Key metrics dashboard using ASCII/Unicode characters
-                    7. Potential biases or limitations
-                    8. Actionable recommendations
+                    7. Distribution fitting analysis and implications
+                    8. Outlier analysis and impact assessment
+                    9. Stationarity test results and their significance
+                    10. Potential biases or limitations
+                    11. Actionable recommendations based on advanced statistics
                     
                     Use these formatting elements:
                     - Create tables using Markdown |---|---| syntax accurately
@@ -391,7 +447,7 @@ Note: The following section reframes our technical findings through a **quantum-
         
         technical_analysis = tech_response.json()['choices'][0]['message']['content']
         
-        # Now generate the creative narrative
+        # Now generate the creative narrative with enhanced insights
         creative_prompt = {
             "model": "gpt-4o-mini",
             "messages": [
@@ -410,7 +466,10 @@ Note: The following section reframes our technical findings through a **quantum-
                     1. Frame data points as temporal travelers
                     2. Present correlations as quantum entanglements
                     3. Describe clusters as convergence points
-                    4. Maintain scientific accuracy while being creative
+                    4. Interpret distribution patterns as temporal waves
+                    5. Frame outliers as temporal anomalies
+                    6. Describe stationarity as temporal stability
+                    7. Maintain scientific accuracy while being creative
                     
                     Use the existing quantum template format:
                     {insights['quantum_template']}"""
@@ -536,6 +595,64 @@ Note: The following section reframes our technical findings through a **quantum-
         - Present insights as revelations across time
         - Maintain scientific accuracy in creative narrative
         """
+    
+    def advanced_statistical_analysis(self):
+        """
+        Perform advanced statistical analysis with hypothesis testing
+        and distribution fitting.
+        """
+        numeric_df = self.df.select_dtypes(include=['float64', 'int64'])
+        results = {}
+        
+        for column in numeric_df.columns:
+            data = numeric_df[column].dropna()
+            
+            # Distribution fitting
+            distributions = [
+                stats.norm, stats.gamma, stats.lognorm, 
+                stats.exponweib, stats.beta
+            ]
+            
+            best_dist = None
+            best_params = None
+            best_kstest = float('inf')
+            
+            for dist in distributions:
+                try:
+                    params = dist.fit(data)
+                    _, p_value = stats.kstest(data, dist.name, params)
+                    if p_value > best_kstest:
+                        best_dist = dist.name
+                        best_params = params
+                        best_kstest = p_value
+                except:
+                    continue
+            
+            # Outlier detection using IQR and Z-score
+            q1, q3 = np.percentile(data, [25, 75])
+            iqr = q3 - q1
+            iqr_outliers = ((data < (q1 - 1.5 * iqr)) | (data > (q3 + 1.5 * iqr))).sum()
+            
+            z_scores = np.abs(stats.zscore(data))
+            z_outliers = (z_scores > 3).sum()
+            
+            # Stationarity test
+            try:
+                adf_stat, adf_p = sm.tsa.stattools.adfuller(data)[:2]
+            except:
+                adf_stat, adf_p = None, None
+            
+            results[column] = {
+                'best_fitting_distribution': best_dist,
+                'distribution_p_value': best_kstest,
+                'iqr_outliers': iqr_outliers,
+                'z_score_outliers': z_outliers,
+                'is_stationary': adf_p < 0.05 if adf_p is not None else None,
+                'skewness': stats.skew(data),
+                'kurtosis': stats.kurtosis(data)
+            }
+        
+        return results
 
 def main():
     if len(sys.argv) < 2:
