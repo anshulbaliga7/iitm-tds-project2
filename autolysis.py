@@ -432,107 +432,67 @@ Note: The following section reframes our technical findings through a **quantum-
             print(f"Error during analysis: {e}")
             return False
     
-    def _summarize_advanced_stats(self, advanced_stats):
-        """
-        Summarize advanced statistics into a concise format.
-        """
-        summary = {
-            'distributions': {},
-            'stationarity': 0,
-            'outliers': {'iqr': 0, 'zscore': 0},
-            'shape': {'skewed': 0, 'normal': 0}
-        }
-        
-        for col, stats in advanced_stats.items():
-            # Count distribution types
-            dist = stats.get('best_fitting_distribution')
-            summary['distributions'][dist] = summary['distributions'].get(dist, 0) + 1
-            
-            # Count stationary series
-            if stats.get('is_stationary'):
-                summary['stationarity'] += 1
-            
-            # Sum outliers
-            summary['outliers']['iqr'] += stats.get('iqr_outliers', 0)
-            summary['outliers']['zscore'] += stats.get('z_score_outliers', 0)
-            
-            # Classify distribution shape
-            if abs(stats.get('skewness', 0)) > 0.5:
-                summary['shape']['skewed'] += 1
-            else:
-                summary['shape']['normal'] += 1
-        
-        return summary
-
-    def _summarize_correlations(self, correlations):
-        """
-        Summarize correlation patterns into key insights.
-        """
-        if not correlations:
-            return {}
-        
-        summary = {
-            'strong_positive': [],
-            'strong_negative': [],
-            'moderate': 0,
-            'weak': 0
-        }
-        
-        for var1, corrs in correlations.items():
-            for var2, value in corrs.items():
-                if var1 != var2:
-                    if abs(value) > 0.7:
-                        pair = f"{var1}/{var2}"
-                        if value > 0:
-                            summary['strong_positive'].append(pair)
-                        else:
-                            summary['strong_negative'].append(pair)
-                    elif abs(value) > 0.5:
-                        summary['moderate'] += 1
-                    else:
-                        summary['weak'] += 1
-        
-        # Keep only top 3 strong correlations
-        summary['strong_positive'] = summary['strong_positive'][:3]
-        summary['strong_negative'] = summary['strong_negative'][:3]
-        
-        return summary
-
     def _generate_dynamic_prompt(self, insights):
         """
         Generate a two-part prompt: technical analysis and creative narrative
-        with optimized token usage.
         """
-        # Extract and summarize metrics
+        # Extract metrics
         total_rows = insights['data_overview']['size']
         missing_data = len(insights['missing_data'])
         num_clusters = insights['clusters']
         
-        # Summarize advanced statistics and correlations
-        advanced_summary = self._summarize_advanced_stats(insights.get('advanced_statistics', {}))
-        correlation_summary = self._summarize_correlations(insights.get('correlations', {}))
+        # Extract advanced statistics if available
+        advanced_stats = insights.get('advanced_statistics', {})
         
-        # Build the technical analysis prompt with summarized data
+        # Build the technical analysis prompt
         technical_prompt = {
             "model": "gpt-4o-mini",
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are a data scientist presenting a comprehensive analysis. Focus on statistical insights and patterns."
+                    "content": """You are a data scientist presenting a comprehensive analysis. 
+                    Focus on statistical insights, patterns, and create ASCII/Markdown tables and visualizations."""
                 },               
                 {
                     "role": "user",
                     "content": f"""
-                    Dataset Overview:
-                    Size: {total_rows}, Missing: {missing_data}, Clusters: {num_clusters}
+                    Dataset Analysis Report:
                     
-                    Statistical Summary:
-                    {json.dumps(advanced_summary, indent=2)}
+                    Overview:
+                    - Dataset Size: {total_rows}
+                    - Missing Data Points: {missing_data}
+                    - Identified Clusters: {num_clusters}
                     
-                    Key Correlations:
-                    {json.dumps(correlation_summary, indent=2)}
+                    Advanced Statistical Analysis:
+                    - Distribution Fitting Results: {json.dumps({k: v['best_fitting_distribution'] for k, v in advanced_stats.items()}, indent=2)}
+                    - Stationarity Tests: {json.dumps({k: v['is_stationary'] for k, v in advanced_stats.items()}, indent=2)}
+                    - Outlier Analysis: {json.dumps({k: {'iqr_outliers': v['iqr_outliers'], 'z_score_outliers': v['z_score_outliers']} for k, v in advanced_stats.items()}, indent=2)}
+                    - Distribution Characteristics: {json.dumps({k: {'skewness': v['skewness'], 'kurtosis': v['kurtosis']} for k, v in advanced_stats.items()}, indent=2)}
                     
-                    Please provide a detailed technical analysis following the standard format."""
+                    Correlation Patterns:
+                    {json.dumps(insights.get('correlations', {}), indent=2)}
+                    
+                    Please provide a detailed technical analysis including:
+                    1. Dataset characteristics in a formatted Markdown table
+                    2. Statistical significance summary with ASCII box plots where relevant
+                    3. Correlation matrix as a formatted Markdown table
+                    4. Cluster analysis summary with text-based visualization
+                    5. Missing data patterns in tabular format
+                    6. Key metrics dashboard using ASCII/Unicode characters
+                    7. Distribution fitting analysis and implications
+                    8. Outlier analysis and impact assessment
+                    9. Stationarity test results and their significance
+                    10. Potential biases or limitations
+                    11. Actionable recommendations based on advanced statistics
+                    
+                    Use these formatting elements:
+                    - Create tables using Markdown |---|---| syntax accurately
+                    - Use Unicode box-drawing characters for simple visualizations
+                    - Format key metrics in highlighted blocks
+                    - Use bullet points and numbered lists for clarity
+                    - Include ASCII art charts where appropriate
+                    
+                    Format everything in Markdown with clear sections."""
                 }
             ]
         }
