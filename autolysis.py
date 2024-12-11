@@ -507,79 +507,128 @@ Note: The following section reframes our technical findings through a **quantum-
     def visualize_statistics(self):
         """
         Create statistical summary visualizations including box plots
-        and violin plots for numeric columns, optimized for small images.
+        and violin plots for numeric columns, with enhanced styling and context.
         """
         numeric_df = self.df.select_dtypes(include=['float64', 'int64'])
         if len(numeric_df.columns) == 0:
             return None
         
-        # Create figure with two rows: box plots and violin plots, optimized for 512x512 px
+        # Set style for better readability
+        plt.style.use('default')  # Reset to default style first
+        sns.set_theme(style="whitegrid")  # Use seaborn's whitegrid theme
+        sns.set_palette("husl")
+        
+        # Create figure with two rows: box plots and violin plots
         fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, 
-                                      figsize=(6.4, 6.4))  # 6.4 inches = 512 pixels at 80 DPI
+                                      figsize=(8, 10))
         
-        # Box plots
-        sns.boxplot(data=numeric_df, ax=ax1)
-        ax1.set_title('Box Plots of Numeric Variables')
-        ax1.tick_params(axis='x', rotation=45)
+        # Box plots with enhanced styling
+        sns.boxplot(data=numeric_df, ax=ax1, whis=1.5)
+        ax1.set_title('Distribution of Numeric Variables\n(Box Plots)', pad=20)
+        ax1.set_xlabel('Variables', labelpad=10)
+        ax1.set_ylabel('Values', labelpad=10)
+        ax1.tick_params(axis='x', rotation=45, labelsize=8)
         
-        # Violin plots
-        sns.violinplot(data=numeric_df, ax=ax2)
-        ax2.set_title('Violin Plots of Numeric Variables')
-        ax2.tick_params(axis='x', rotation=45)
+        # Add explanation text for box plot
+        box_text = "Box Plot Legend:\n⎯ Max\n▢ Q3\n— Median\n▢ Q1\n⎯ Min\n• Outliers"
+        ax1.text(1.15, 0.5, box_text, transform=ax1.transAxes, 
+                 bbox=dict(facecolor='white', alpha=0.8, edgecolor='gray'),
+                 verticalalignment='center')
+        
+        # Violin plots with enhanced styling
+        sns.violinplot(data=numeric_df, ax=ax2, inner='quartile')
+        ax2.set_title('Distribution Shape of Numeric Variables\n(Violin Plots)', pad=20)
+        ax2.set_xlabel('Variables', labelpad=10)
+        ax2.set_ylabel('Values', labelpad=10)
+        ax2.tick_params(axis='x', rotation=45, labelsize=8)
+        
+        # Add explanation text for violin plot
+        violin_text = "Violin Plot Shows:\n- Distribution shape\n- Data density\n- Quartiles\n- Full data range"
+        ax2.text(1.15, 0.5, violin_text, transform=ax2.transAxes,
+                 bbox=dict(facecolor='white', alpha=0.8, edgecolor='gray'),
+                 verticalalignment='center')
         
         plt.tight_layout()
         stats_path = os.path.join(self.output_dir, 'statistical_summary.png')
-        plt.savefig(stats_path, dpi=80, bbox_inches='tight')  # Removed quality and format parameters
+        plt.savefig(stats_path, dpi=100, bbox_inches='tight', facecolor='white')
         plt.close()
         
         return stats_path
     
     def analyze_categorical_patterns(self):
         """
-        Analyze and visualize patterns in categorical columns.
-        
-        Returns:
-            str: Path to saved visualization
+        Analyze and visualize patterns in categorical columns with enhanced context.
         """
         cat_cols = self.df.select_dtypes(include=['object', 'category']).columns
         if len(cat_cols) == 0:
             return None
         
-        # Select top 4 categorical columns (reduced from 6 to fit better in 512x512)
+        # Set style for better readability
+        plt.style.use('default')  # Reset to default style first
+        sns.set_theme(style="whitegrid")  # Use seaborn's whitegrid theme
+        sns.set_palette("husl")
+        
+        # Select top 4 categorical columns
         plot_cols = cat_cols[:4]
         n_cols = len(plot_cols)
         
         if n_cols == 0:
             return None
         
-        # Create 2x2 grid for better fit in 512x512
-        fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(6.4, 6.4))
-        axes = axes.flatten()
+        # Create 2x2 grid
+        fig = plt.figure(figsize=(12, 10))
+        gs = fig.add_gridspec(2, 2, hspace=0.4, wspace=0.3)
         
         for idx, col in enumerate(plot_cols):
             try:
-                # Get value counts and limit to top 5 (reduced from 10 for better readability)
-                value_counts = self.df[col].value_counts().head(5)
+                # Calculate row and column position
+                row = idx // 2
+                col_pos = idx % 2
                 
-                if len(value_counts) > 0:
-                    sns.barplot(x=value_counts.values, 
-                              y=[str(x)[:20] for x in value_counts.index],  # Truncate to 20 chars
-                              ax=axes[idx])
-                    
-                    axes[idx].set_title(f'Top 5 in {col[:15]}...' if len(col) > 15 else f'Top 5 in {col}')
-                    axes[idx].set_xlabel('Count')
+                # Create subplot with specific position
+                ax = fig.add_subplot(gs[row, col_pos])
+                
+                # Get value counts and calculate percentages
+                value_counts = self.df[col].value_counts().head(5)
+                total = value_counts.sum()
+                percentages = (value_counts / total * 100).round(1)
+                
+                # Create bar plot
+                bars = sns.barplot(x=value_counts.values, 
+                                 y=[str(x)[:20] for x in value_counts.index],
+                                 ax=ax)
+                
+                # Add percentage labels on bars
+                for i, (v, p) in enumerate(zip(value_counts.values, percentages)):
+                    bars.text(v, i, f' {p}%', va='center')
+                
+                # Enhance title and labels
+                ax.set_title(f'Top 5 Categories in\n{col[:25]}...' if len(col) > 25 else f'Top 5 Categories in {col}',
+                            pad=20)
+                ax.set_xlabel('Count', labelpad=10)
+                
+                # Add total count in subtitle
+                ax.text(0.5, -0.2, f'Total unique values: {self.df[col].nunique()}',
+                       ha='center', transform=ax.transAxes, style='italic')
+                
             except Exception as e:
                 print(f"Warning: Could not plot column {col}: {str(e)}")
-                axes[idx].text(0.5, 0.5, f'Could not plot {col}',
-                             ha='center', va='center')
+                if idx < len(plot_cols):
+                    ax = fig.add_subplot(gs[row, col_pos])
+                    ax.text(0.5, 0.5, f'Could not plot {col}\nError: {str(e)}',
+                           ha='center', va='center', wrap=True)
         
-        # Remove empty subplots if any
-        for idx in range(len(plot_cols), len(axes)):
-            fig.delaxes(axes[idx])
+        # Add overall title
+        fig.suptitle('Distribution of Top Categories in Categorical Variables\n', 
+                     fontsize=14, y=1.02)
         
-        plt.tight_layout()
+        # Add explanation text
+        fig.text(0.5, -0.05, 
+                 'Note: Showing top 5 categories for each variable. Percentages indicate proportion of total values.',
+                 ha='center', style='italic', wrap=True)
+        
         cat_path = os.path.join(self.output_dir, 'categorical_analysis.png')
-        plt.savefig(cat_path, dpi=80, bbox_inches='tight')
+        plt.savefig(cat_path, dpi=100, bbox_inches='tight', facecolor='white')
         plt.close()
         
         return cat_path
