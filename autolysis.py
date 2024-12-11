@@ -434,23 +434,22 @@ Note: The following section reframes our technical findings through a **quantum-
     def _generate_dynamic_prompt(self, insights):
         """
         Generate a two-part prompt: technical analysis and creative narrative
+        with improved structure and clarity.
         """
         # Extract metrics
         total_rows = insights['data_overview']['size']
         missing_data = len(insights['missing_data'])
         num_clusters = insights['clusters']
-        
-        # Extract advanced statistics if available
         advanced_stats = insights.get('advanced_statistics', {})
         
-        # Build the technical analysis prompt
+        # Build the technical analysis prompt with clear structure
         technical_prompt = {
             "model": "gpt-4o-mini",
             "messages": [
                 {
                     "role": "system",
                     "content": """You are a data scientist presenting a comprehensive analysis. 
-                    Focus on statistical insights, patterns, and create ASCII/Markdown tables and visualizations."""
+                    Focus on clear, concise insights with brief summaries preceding detailed explanations."""
                 },               
                 {
                     "role": "user",
@@ -471,27 +470,27 @@ Note: The following section reframes our technical findings through a **quantum-
                     Correlation Patterns:
                     {json.dumps(insights.get('correlations', {}), indent=2)}
                     
-                    Please provide a detailed technical analysis including:
-                    1. Dataset characteristics in a formatted Markdown table
-                    2. Statistical significance summary with ASCII box plots where relevant
-                    3. Correlation matrix as a formatted Markdown table
-                    4. Cluster analysis summary with text-based visualization
-                    5. Missing data patterns in tabular format
-                    6. Key metrics dashboard using ASCII/Unicode characters
-                    7. Distribution fitting analysis and implications
-                    8. Outlier analysis and impact assessment
-                    9. Stationarity test results and their significance
-                    10. Potential biases or limitations
-                    11. Actionable recommendations based on advanced statistics
+                    Please provide a technical analysis with:
+                    1. Executive Summary (2-3 key findings)
+                    2. Detailed Analysis:
+                       - Dataset characteristics (table format)
+                       - Statistical significance summary
+                       - Correlation insights
+                       - Cluster analysis
+                       - Distribution patterns
+                       - Missing data impact
+                    3. Key Metrics Dashboard
+                    4. Limitations and Biases
+                    5. Actionable Recommendations
                     
-                    Use these formatting elements:
-                    - Create tables using Markdown |---|---| syntax accurately
-                    - Use Unicode box-drawing characters for simple visualizations
-                    - Format key metrics in highlighted blocks
-                    - Use bullet points and numbered lists for clarity
-                    - Include ASCII art charts where appropriate
+                    Format Guidelines:
+                    - Start each section with a brief summary
+                    - Use tables for structured data
+                    - Include confidence levels for statistical claims
+                    - Highlight practical implications
+                    - Use bullet points for clarity
                     
-                    Format everything in Markdown with clear sections."""
+                    Format in clear Markdown sections."""
                 }
             ]
         }
@@ -503,14 +502,14 @@ Note: The following section reframes our technical findings through a **quantum-
         
         technical_analysis = tech_response.json()['choices'][0]['message']['content']
         
-        # Now generate the creative narrative with enhanced insights
+        # Now generate the creative narrative with clearer connection to data
         creative_prompt = {
             "model": "gpt-4o-mini",
             "messages": [
                 {
                     "role": "system",
-                    "content": """You are a quantum historian from 2075. 
-                    Based on the technical analysis provided, create an engaging narrative."""
+                    "content": """You are a quantum historian from 2075, tasked with making data patterns 
+                    accessible through creative metaphors while maintaining statistical accuracy."""
                 },
                 {
                     "role": "user",
@@ -518,17 +517,23 @@ Note: The following section reframes our technical findings through a **quantum-
                     Technical Analysis:
                     {technical_analysis}
                     
-                    Transform this into a quantum narrative following these directives:
-                    1. Frame data points as temporal travelers
-                    2. Present correlations as quantum entanglements
-                    3. Describe clusters as convergence points
-                    4. Interpret distribution patterns as temporal waves
-                    5. Frame outliers as temporal anomalies
-                    6. Describe stationarity as temporal stability
-                    7. Maintain scientific accuracy while being creative
+                    Transform the key statistical findings into a quantum narrative:
+                    1. Frame significant correlations (|r| > 0.7) as quantum entanglements
+                    2. Present major clusters as temporal convergence points
+                    3. Describe strong distribution patterns as quantum waves
+                    4. Highlight statistical significance in temporal terms
+                    5. Connect each creative element to specific data points
                     
-                    Use the existing quantum template format:
-                    {insights['quantum_template']}"""
+                    Structure:
+                    1. Brief introduction explaining the quantum-temporal framework
+                    2. Key findings with clear statistical backing
+                    3. Practical implications in both quantum and real-world terms
+                    4. Summary connecting creative elements to technical insights
+                    
+                    Use the quantum template format:
+                    {insights['quantum_template']}
+                    
+                    Note: Maintain clear connections between metaphors and data."""
                 }
             ]
         }
