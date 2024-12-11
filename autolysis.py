@@ -33,6 +33,11 @@ class DataAnalyzer:
         if not os.path.exists(csv_path):
             raise FileNotFoundError(f"Input file {csv_path} not found")
         
+        # Create output directory based on CSV filename
+        csv_basename = os.path.splitext(os.path.basename(csv_path))[0]
+        self.output_dir = os.path.join(os.path.dirname(csv_path), csv_basename)
+        os.makedirs(self.output_dir, exist_ok=True)
+        
         # Try different encodings and handle empty files
         encodings = ['utf-8', 'latin-1', 'iso-8859-1', 'cp1252']
         for encoding in encodings:
@@ -61,8 +66,8 @@ class DataAnalyzer:
         openai.api_key = os.environ["AIPROXY_TOKEN"]
         #openai.api_key = "eyJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6IjIyZjMwMDI3NDNAZHMuc3R1ZHkuaWl0bS5hYy5pbiJ9.i6MpRliZ3nPhSAQ_bOkOW-isk4R9iXZY3cM-3AuFi3o"
         
-        # Set up single README path
-        self.readme_path = os.path.join(os.path.dirname(csv_path), 'README.md')
+        # Set up README path in the output directory
+        self.readme_path = os.path.join(self.output_dir, 'README.md')
     
     def generate_data_summary(self):
         """
@@ -163,7 +168,6 @@ class DataAnalyzer:
         Returns:
             dict: Correlation matrix and visualization path
         """
-        # Select only numeric columns
         numeric_df = self.df.select_dtypes(include=['float64', 'int64'])
         
         if len(numeric_df.columns) < 2:
@@ -172,20 +176,19 @@ class DataAnalyzer:
         # Compute correlation matrix
         corr_matrix = numeric_df.corr()
         
-        # Create correlation heatmap
-        plt.figure(figsize=(10, 8))
+        # Create correlation heatmap with 512x512 size
+        plt.figure(figsize=(6.4, 6.4))  # 6.4 inches = 512 pixels at 80 DPI
         sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', center=0)
         plt.title('Correlation Heatmap')
         plt.tight_layout()
-        corr_path = os.path.join(os.path.dirname(self.readme_path), 'correlation_heatmap.png')
-        plt.savefig(corr_path)
+        corr_path = os.path.join(self.output_dir, 'correlation_heatmap.png')
+        plt.savefig(corr_path, dpi=80, bbox_inches='tight')
         plt.close()
-        
         return {
             "correlation_matrix": corr_matrix.to_dict(),
-            "correlation_heatmap": corr_path
+            "correlation_visualization": corr_path
         }
-    
+
     def cluster_analysis(self, n_init=10):
         """
         Perform basic clustering analysis with preprocessing for missing values.
@@ -221,15 +224,15 @@ class DataAnalyzer:
         pca = PCA(n_components=2)
         pca_data = pca.fit_transform(scaled_data)
         
-        plt.figure(figsize=(10, 8))
+        plt.figure(figsize=(6.4, 6.4))  # 6.4 inches = 512 pixels at 80 DPI
         scatter = plt.scatter(pca_data[:, 0], pca_data[:, 1], c=clusters, cmap='viridis')
         plt.title('Cluster Analysis')
         plt.xlabel('First Principal Component')
         plt.ylabel('Second Principal Component')
         plt.colorbar(scatter)
         
-        cluster_path = os.path.join(os.path.dirname(self.readme_path), 'cluster_analysis.png')
-        plt.savefig(cluster_path)
+        cluster_path = os.path.join(self.output_dir, 'cluster_analysis.png')
+        plt.savefig(cluster_path, dpi=80, bbox_inches='tight')
         plt.close()
         
         return {
@@ -445,18 +448,15 @@ Note: The following section reframes our technical findings through a **quantum-
     def visualize_statistics(self):
         """
         Create statistical summary visualizations including box plots
-        and violin plots for numeric columns.
-        
-        Returns:
-            str: Path to saved visualization
+        and violin plots for numeric columns, optimized for small images.
         """
         numeric_df = self.df.select_dtypes(include=['float64', 'int64'])
         if len(numeric_df.columns) == 0:
             return None
         
-        # Create figure with two rows: box plots and violin plots
+        # Create figure with two rows: box plots and violin plots, optimized for 512x512 px
         fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, 
-                                      figsize=(12, 8))
+                                      figsize=(6.4, 6.4))  # 6.4 inches = 512 pixels at 80 DPI
         
         # Box plots
         sns.boxplot(data=numeric_df, ax=ax1)
@@ -469,8 +469,8 @@ Note: The following section reframes our technical findings through a **quantum-
         ax2.tick_params(axis='x', rotation=45)
         
         plt.tight_layout()
-        stats_path = os.path.join(os.path.dirname(self.readme_path), 'statistical_summary.png')
-        plt.savefig(stats_path)
+        stats_path = os.path.join(self.output_dir, 'statistical_summary.png')
+        plt.savefig(stats_path, dpi=80, bbox_inches='tight')  # Removed quality and format parameters
         plt.close()
         
         return stats_path
@@ -486,43 +486,29 @@ Note: The following section reframes our technical findings through a **quantum-
         if len(cat_cols) == 0:
             return None
         
-        # Select top 6 categorical columns (if more exist)
-        plot_cols = cat_cols[:6]
+        # Select top 4 categorical columns (reduced from 6 to fit better in 512x512)
+        plot_cols = cat_cols[:4]
         n_cols = len(plot_cols)
         
         if n_cols == 0:
             return None
         
-        # Create figure and subplots with proper dimensions
-        n_rows = (n_cols + 1) // 2
-        fig, axes = plt.subplots(nrows=n_rows, ncols=min(2, n_cols), 
-                                figsize=(15, 4 * n_rows))
-        
-        # Convert axes to array for consistent indexing
-        if n_cols == 1:
-            axes = np.array([axes])
-        elif n_rows == 1:
-            axes = np.array([axes])
-        else:
-            axes = axes.reshape(-1)
+        # Create 2x2 grid for better fit in 512x512
+        fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(6.4, 6.4))
+        axes = axes.flatten()
         
         for idx, col in enumerate(plot_cols):
             try:
-                # Get value counts and limit to top 10
-                value_counts = self.df[col].value_counts().head(10)
+                # Get value counts and limit to top 5 (reduced from 10 for better readability)
+                value_counts = self.df[col].value_counts().head(5)
                 
-                # Create bar plot
                 if len(value_counts) > 0:
                     sns.barplot(x=value_counts.values, 
-                              y=[str(x)[:50] for x in value_counts.index],  # Truncate long labels
+                              y=[str(x)[:20] for x in value_counts.index],  # Truncate to 20 chars
                               ax=axes[idx])
                     
-                    axes[idx].set_title(f'Top {len(value_counts)} Values in {col}')
+                    axes[idx].set_title(f'Top 5 in {col[:15]}...' if len(col) > 15 else f'Top 5 in {col}')
                     axes[idx].set_xlabel('Count')
-                    
-                    # Rotate labels if they're too long
-                    if value_counts.index.str.len().max() > 20:
-                        axes[idx].tick_params(axis='y', labelrotation=0)
             except Exception as e:
                 print(f"Warning: Could not plot column {col}: {str(e)}")
                 axes[idx].text(0.5, 0.5, f'Could not plot {col}',
@@ -533,8 +519,8 @@ Note: The following section reframes our technical findings through a **quantum-
             fig.delaxes(axes[idx])
         
         plt.tight_layout()
-        cat_path = os.path.join(os.path.dirname(self.readme_path), 'categorical_analysis.png')
-        plt.savefig(cat_path)
+        cat_path = os.path.join(self.output_dir, 'categorical_analysis.png')
+        plt.savefig(cat_path, dpi=80, bbox_inches='tight')
         plt.close()
         
         return cat_path

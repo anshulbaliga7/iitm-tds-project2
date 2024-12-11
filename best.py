@@ -1,11 +1,12 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
-#   "pandas",
-#   "seaborn",
-#   "matplotlib",
-#   "openai",
-#   "scipy"
+#   "pandas>=2.0.0",
+#   "seaborn>=0.12.0",
+#   "matplotlib>=3.7.0",
+#   "openai>=1.0.0",
+#   "scikit-learn>=1.3.0",
+#   "requests>=2.31.0"
 # ]
 # ///
 
@@ -18,6 +19,7 @@ import matplotlib.pyplot as plt
 from scipy import stats
 import openai
 import requests
+import numpy as np
 
 class DataAnalyzer:
     def __init__(self, csv_path):
@@ -54,13 +56,13 @@ class DataAnalyzer:
         # Handle missing values globally
         self.df = self.df.replace(['nan', 'NaN', 'NULL', ''], pd.NA)
         
-        self.csv_path = csv_path
-        self.output_dir = os.path.join(os.path.dirname(csv_path), 'analysis_output')
-        os.makedirs(self.output_dir, exist_ok=True)
-        
         # Set up OpenAI client
         openai.api_base = "https://aiproxy.sanand.workers.dev/openai/v1"
-        openai.api_key = "eyJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6IjIyZjMwMDI3NDNAZHMuc3R1ZHkuaWl0bS5hYy5pbiJ9.i6MpRliZ3nPhSAQ_bOkOW-isk4R9iXZY3cM-3AuFi3o"
+        openai.api_key = os.environ["AIPROXY_TOKEN"]
+        #openai.api_key = "eyJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6IjIyZjMwMDI3NDNAZHMuc3R1ZHkuaWl0bS5hYy5pbiJ9.i6MpRliZ3nPhSAQ_bOkOW-isk4R9iXZY3cM-3AuFi3o"
+        
+        # Set up single README path
+        self.readme_path = os.path.join(os.path.dirname(csv_path), 'README.md')
     
     def generate_data_summary(self):
         """
@@ -70,48 +72,84 @@ class DataAnalyzer:
             dict: A summary of dataset characteristics
         """
         try:
-            # Basic dataset info
+            # Basic dataset info with error handling
             summary = {
                 "total_rows": len(self.df),
                 "total_columns": len(self.df.columns),
                 "columns": list(self.df.columns),
                 "column_types": {col: str(dtype) for col, dtype in self.df.dtypes.items()},
                 "memory_usage": f"{self.df.memory_usage(deep=True).sum() / 1024**2:.2f} MB",
-                "missing_values": self.df.isnull().sum().to_dict(),
+                "missing_values": self.df.isna().sum().to_dict(),  # isna() catches more types of missing values
                 "duplicates": self.df.duplicated().sum()
             }
             
-            # Numeric columns analysis
-            numeric_cols = self.df.select_dtypes(include=['float64', 'int64']).columns
+            # Numeric columns analysis with safeguards
+            numeric_cols = self.df.select_dtypes(include=['float64', 'int64', 'float32', 'int32']).columns
             if len(numeric_cols) > 0:
-                summary["numeric_summary"] = self.df[numeric_cols].describe().to_dict()
+                try:
+                    desc = self.df[numeric_cols].describe()
+                    # Handle potential inf values
+                    desc = desc.replace([np.inf, -np.inf], np.nan)
+                    summary["numeric_summary"] = desc.to_dict()
+                except Exception as e:
+                    summary["numeric_summary"] = f"Error analyzing numeric columns: {str(e)}"
             
-            # Categorical columns analysis
-            cat_cols = self.df.select_dtypes(include=['object', 'category']).columns
+            # Categorical columns analysis with size limits
+            cat_cols = self.df.select_dtypes(include=['object', 'category', 'bool', 'string']).columns
             if len(cat_cols) > 0:
-                summary["categorical_summary"] = {
-                    col: {
-                        "unique_values": self.df[col].nunique(),
-                        "top_values": self.df[col].value_counts().head(5).to_dict()
-                    } for col in cat_cols
-                }
+                summary["categorical_summary"] = {}
+                for col in cat_cols:
+                    try:
+                        # Limit analysis for columns with too many unique values
+                        if self.df[col].nunique() > 1000:
+                            summary["categorical_summary"][col] = {
+                                "unique_values": self.df[col].nunique(),
+                                "warning": "Too many unique values for detailed analysis"
+                            }
+                        else:
+                            value_counts = self.df[col].value_counts()
+                            # Handle potentially large string values
+                            truncated_dict = {
+                                str(k)[:100]: v for k, v in 
+                                value_counts.head(5).to_dict().items()
+                            }
+                            summary["categorical_summary"][col] = {
+                                "unique_values": self.df[col].nunique(),
+                                "top_values": truncated_dict
+                            }
+                    except Exception as e:
+                        summary["categorical_summary"][col] = f"Error analyzing column: {str(e)}"
             
-            # Date columns detection and analysis
+            # Date columns detection and analysis with better error handling
             date_cols = []
             for col in self.df.columns:
                 try:
-                    pd.to_datetime(self.df[col])
-                    date_cols.append(col)
+                    # Check if column is already datetime
+                    if pd.api.types.is_datetime64_any_dtype(self.df[col]):
+                        date_cols.append(col)
+                    else:
+                        # Sample the column to test for datetime conversion
+                        sample = self.df[col].dropna().head(1000)
+                        pd.to_datetime(sample, errors='raise')
+                        date_cols.append(col)
                 except:
                     continue
             
             if date_cols:
-                summary["date_columns"] = {
-                    col: {
-                        "min_date": str(pd.to_datetime(self.df[col]).min()),
-                        "max_date": str(pd.to_datetime(self.df[col]).max())
-                    } for col in date_cols
-                }
+                summary["date_columns"] = {}
+                for col in date_cols:
+                    try:
+                        dates = pd.to_datetime(self.df[col], errors='coerce')
+                        valid_dates = dates.dropna()
+                        if len(valid_dates) > 0:
+                            summary["date_columns"][col] = {
+                                "min_date": str(valid_dates.min()),
+                                "max_date": str(valid_dates.max()),
+                                "valid_dates_count": len(valid_dates),
+                                "invalid_dates_count": len(dates) - len(valid_dates)
+                            }
+                    except Exception as e:
+                        summary["date_columns"][col] = f"Error analyzing dates: {str(e)}"
             
             return summary
         except Exception as e:
@@ -125,7 +163,6 @@ class DataAnalyzer:
         Returns:
             dict: Correlation matrix and visualization path
         """
-        # Select only numeric columns
         numeric_df = self.df.select_dtypes(include=['float64', 'int64'])
         
         if len(numeric_df.columns) < 2:
@@ -134,21 +171,20 @@ class DataAnalyzer:
         # Compute correlation matrix
         corr_matrix = numeric_df.corr()
         
-        # Create correlation heatmap
-        plt.figure(figsize=(10, 8))
+        # Create correlation heatmap with 512x512 size
+        plt.figure(figsize=(6.4, 6.4))  # 6.4 inches = 512 pixels at 80 DPI
         sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', center=0)
         plt.title('Correlation Heatmap')
         plt.tight_layout()
-        corr_path = 'correlation_heatmap.png'
-        plt.savefig(corr_path)
+        corr_path = os.path.join(os.path.dirname(self.readme_path), 'correlation_heatmap.png')
+        plt.savefig(corr_path, dpi=80, bbox_inches='tight')
         plt.close()
-        
         return {
             "correlation_matrix": corr_matrix.to_dict(),
-            "correlation_heatmap": corr_path
+            "correlation_visualization": corr_path
         }
-    
-    def cluster_analysis(self):
+
+    def cluster_analysis(self, n_init=10):
         """
         Perform basic clustering analysis with preprocessing for missing values.
         
@@ -174,7 +210,7 @@ class DataAnalyzer:
         scaled_data = scaler.fit_transform(imputed_data)
         
         # Perform K-means clustering
-        kmeans = KMeans(n_clusters=3, random_state=42)
+        kmeans = KMeans(n_clusters=3, random_state=42, n_init=n_init)
         clusters = kmeans.fit_predict(scaled_data)
         
         # Visualize clusters using first two principal components
@@ -183,15 +219,15 @@ class DataAnalyzer:
         pca = PCA(n_components=2)
         pca_data = pca.fit_transform(scaled_data)
         
-        plt.figure(figsize=(10, 8))
+        plt.figure(figsize=(6.4, 6.4))  # 6.4 inches = 512 pixels at 80 DPI
         scatter = plt.scatter(pca_data[:, 0], pca_data[:, 1], c=clusters, cmap='viridis')
         plt.title('Cluster Analysis')
         plt.xlabel('First Principal Component')
         plt.ylabel('Second Principal Component')
         plt.colorbar(scatter)
         
-        cluster_path = 'cluster_analysis.png'
-        plt.savefig(cluster_path)
+        cluster_path = os.path.join(os.path.dirname(self.readme_path), 'cluster_analysis.png')
+        plt.savefig(cluster_path, dpi=80, bbox_inches='tight')
         plt.close()
         
         return {
@@ -201,7 +237,7 @@ class DataAnalyzer:
     
     def generate_story(self, data_summary, correlation_results, cluster_results):
         """
-        Generate a narrative story about the data analysis.
+        Generate a narrative story combining technical and creative analyses.
         """
         try:
             # Prepare analysis insights
@@ -211,36 +247,51 @@ class DataAnalyzer:
                     "memory": data_summary['memory_usage'],
                     "duplicates": data_summary['duplicates']
                 },
-                "missing_data": {
-                    col: count for col, count in data_summary['missing_values'].items() if count > 0
-                },
+                "quantum_template": self._get_quantum_template(),
+                "missing_data": {coll: count for coll, count in data_summary['missing_values'].items() if count > 0},
                 "correlations": correlation_results.get('correlation_matrix', {}),
                 "clusters": len(set(cluster_results.get('cluster_labels', []))) if 'cluster_labels' in cluster_results else 0
             }
             
-            # Generate dynamic prompt based on data characteristics
-            prompt = self._generate_dynamic_prompt(insights)
+            # Get both technical and creative analyses
+            technical_analysis, creative_prompt = self._generate_dynamic_prompt(insights)
             
-            # Make API call with optimized data
-            response = self._make_api_call(prompt)
+            # Get creative narrative
+            creative_response = self._make_api_call(creative_prompt)
             
-            if response.status_code == 200:
-                story = response.json()['choices'][0]['message']['content']
+            if creative_response.status_code == 200:
+                creative_story = creative_response.json()['choices'][0]['message']['content']
                 
-                # Save story with visualizations
-                output_path = 'C:\\Users\\bali\\OneDrive - PESUNIVERSITY\\Documents\\iitmbs\\iitm-tds-project2\\README.md'
-                with open(output_path, 'w') as f:
-                    f.write(story)
-                    
-                    # Add visualization references if they exist
-                    if os.path.exists('correlation_heatmap.png'):
-                        f.write('\n\n## Correlation Analysis\n![Correlation Heatmap](correlation_heatmap.png)\n')
-                    if os.path.exists('cluster_analysis.png'):
-                        f.write('\n\n## Cluster Analysis\n![Cluster Analysis](cluster_analysis.png)\n')
+                # Create combined story
+                combined_story = f"""# From Numbers to Narratives: Revealing Data Secrets 
+## Anshul Ramdas Baliga, 22f3002743
+## Executive Summary
+This analysis presents a comprehensive examination of the dataset through two complementary lenses:
+1. A creative quantum-temporal interpretation for innovative pattern discovery (My unique story-telling approach)
+2. A technical statistical analysis for rigorous data insights 
+
+## Quantum Temporal Analysis on the dataset  (My unique story-telling approach)
+Note: The following section reframes our technical findings through a **quantum-temporal lens** to explore innovative patterns and relationships in the data. Hope you enjoy the story!\n
+{creative_story}
+
+## Technical Analysis
+{technical_analysis}
+---
+
+---
+## Visualizations
+"""
                 
-                return story
+                # Write to single README file
+                with open(self.readme_path, 'w', encoding='utf-8') as f:
+                    f.write(combined_story)
+                    f.write('\n\n### Correlation Analysis\n![Correlation Heatmap](correlation_heatmap.png)\n')
+                    f.write('\n\n### Cluster Analysis\n![Cluster Analysis](cluster_analysis.png)\n')
+                    f.write('\n\n### Statistical Summary\n![Statistical Summary](statistical_summary.png)\n')
+                    f.write('\n\n### Categorical Analysis\n![Categorical Analysis](categorical_analysis.png)\n')
+                return combined_story
             else:
-                raise Exception(f"API request failed with status code: {response.status_code}")
+                raise Exception(f"API request failed with status code: {creative_response.status_code}")
         except Exception as e:
             print(f"Story generation error: {e}")
             return "# Data Analysis Story\n\nUnable to generate narrative due to an error."
@@ -249,94 +300,120 @@ class DataAnalyzer:
         """
         Perform comprehensive data analysis and generate story.
         """
-        # Create output directory if it doesn't exist
-        if not os.path.exists(self.output_dir):
-            os.makedirs(self.output_dir)
-        
-        # Generate all analyses
-        data_summary = self.generate_data_summary()
-        correlation_results = self.detect_correlations()
-        cluster_results = self.cluster_analysis()
-        
-        # Generate story
-        story = self.generate_story(data_summary, correlation_results, cluster_results)
-        
-        # Generate additional visualizations
-        self.visualize_distributions()  # Distribution plot
-        self.visualize_statistics()     # Box/Violin plot
-        
-        # Save story with all visualizations
-        output_path = os.path.join(self.output_dir, 'README.md')
-        with open(output_path, 'w') as f:
-            f.write(story)
+        try:
+            # Suppress sklearn warnings
+            import warnings
+            warnings.filterwarnings("ignore", category=FutureWarning)
             
-            # Core visualizations
-            if os.path.exists('correlation_heatmap.png'):
-                f.write('\n\n## Correlation Analysis\n![Correlation Heatmap](correlation_heatmap.png)\n')
-            if os.path.exists('cluster_analysis.png'):
-                f.write('\n\n## Cluster Analysis\n![Cluster Analysis](cluster_analysis.png)\n')
+            # Generate all analyses
+            data_summary = self.generate_data_summary()
+            correlation_results = self.detect_correlations()
+            cluster_results = self.cluster_analysis(n_init=10)
             
-            # Additional visualizations
-            if os.path.exists('distribution_plot.png'):
-                f.write('\n\n## Distribution Analysis\n![Distribution Analysis](distribution_plot.png)\n')
-            if os.path.exists('statistical_summary.png'):
-                f.write('\n\n## Statistical Summary\n![Statistical Summary](statistical_summary.png)\n')
+            # Generate story (this will write to README.md)
+            story = self.generate_story(data_summary, correlation_results, cluster_results)
+            
+            # Generate additional visualizations
+            self.analyze_categorical_patterns()
+            self.visualize_statistics()
+            
+            print(f"Analysis complete. Check {self.readme_path} and generated images.")
+            return True
+        except Exception as e:
+            print(f"Error during analysis: {e}")
+            return False
     
     def _generate_dynamic_prompt(self, insights):
         """
-        Generate a dynamic prompt based on data characteristics.
-        
-        Args:
-            insights (dict): Dictionary containing analysis insights
-        
-        Returns:
-            dict: OpenAI API request payload
+        Generate a two-part prompt: technical analysis and creative narrative
         """
-        # Extract key metrics
+        # Extract metrics (keep existing code)
         total_rows = insights['data_overview']['size']
         missing_data = len(insights['missing_data'])
         num_clusters = insights['clusters']
         
-        # Build the prompt template
-        prompt = {
+        # Build the technical analysis prompt
+        technical_prompt = {
             "model": "gpt-4o-mini",
             "messages": [
                 {
                     "role": "system",
-                    "content": """You are a quantum historian and data chronicler from the year 2075, tasked with decoding the secret journeys of sentient data across the fabric of space-time.
-                    Your mission: Construct a compelling narrative that merges imaginative storytelling with precise analytical insights, revealing the interconnected journeys of data across temporal dimensions.
-                    
-                    Transmission Protocol:
-                    - Each data point is a living traveler with a unique quantum signature.
-                    - Clusters are dimensional nexus points where timelines intersect, fostering innovation or historical echoes.
-                    - Dimensional discontinuities signify missing or obscured data with implications for the broader quantum network.
-                    - Narratives should seamlessly integrate visuals as storytelling artifacts while exposing the causal networks within the data."""
-                },
+                    "content": """You are a data scientist presenting a comprehensive analysis. 
+                    Focus on statistical insights, patterns, and create ASCII/Markdown tables and visualizations."""
+                },               
                 {
                     "role": "user",
-                    "content": f"""Temporal Reconnaissance Mission:
-
-                    Quantum Data Manifold Parameters:
-                    - Total Temporal Vectors: {total_rows}
-                    - Dimensional Discontinuities: {missing_data} quantum nodes with unresolved trajectories.
-                    - Convergence Zones: {num_clusters} identified temporal clusters.
-
-                    Mission Directives:
-                    1. Construct a chronological narrative of data migrations, highlighting the unique paths of data travelers.
-                    2. Decode the quantum correlations and causal relationships between interdimensional variables.
-                    3. Analyze the significance of temporal convergence zones and their roles in the broader quantum tapestry.
-                    4. Unveil hidden causality networks, showing how disparate data travelers influence each other and the timeline fabric.
-                    5. Generate predictive insights about the future trajectories of data travelers, pushing beyond current computational limitations.
-
-                    Transmission Requirements:
-                    - Use Markdown to encrypt the quantum narrative.
-                    - Blend imaginative storytelling with analytical clarity to engage diverse audiences.
-                    - Integrate at least two key visuals (e.g., heatmaps, cluster diagrams) as pivotal elements of the narrative.
-                    - Prioritize a revelatory approach that transcends conventional data analysis and explores the sentience of data."""
+                    "content": f"""
+                    Dataset Analysis Report:
+                    
+                    Overview:
+                    - Dataset Size: {total_rows}
+                    - Missing Data Points: {missing_data}
+                    - Identified Clusters: {num_clusters}
+                    
+                    Statistical Analysis:
+                    {json.dumps(insights.get('statistical_analysis', {}), indent=2)}
+                    
+                    Correlation Patterns:
+                    {json.dumps(insights.get('correlations', {}), indent=2)}
+                    
+                    Please provide a detailed technical analysis including:
+                    1. Dataset characteristics in a formatted Markdown table
+                    2. Statistical significance summary with ASCII box plots where relevant
+                    3. Correlation matrix as a formatted Markdown table
+                    4. Cluster analysis summary with text-based visualization
+                    5. Missing data patterns in tabular format
+                    6. Key metrics dashboard using ASCII/Unicode characters
+                    7. Potential biases or limitations
+                    8. Actionable recommendations
+                    
+                    Use these formatting elements:
+                    - Create tables using Markdown |---|---| syntax accurately
+                    - Use Unicode box-drawing characters for simple visualizations
+                    - Format key metrics in highlighted blocks
+                    - Use bullet points and numbered lists for clarity
+                    - Include ASCII art charts where appropriate
+                    
+                    Format everything in Markdown with clear sections."""
                 }
             ]
         }
-        return prompt
+        
+        # Get technical analysis first
+        tech_response = self._make_api_call(technical_prompt)
+        if tech_response.status_code != 200:
+            raise Exception("Failed to generate technical analysis")
+        
+        technical_analysis = tech_response.json()['choices'][0]['message']['content']
+        
+        # Now generate the creative narrative
+        creative_prompt = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": """You are a quantum historian from 2075. 
+                    Based on the technical analysis provided, create an engaging narrative."""
+                },
+                {
+                    "role": "user",
+                    "content": f"""
+                    Technical Analysis:
+                    {technical_analysis}
+                    
+                    Transform this into a quantum narrative following these directives:
+                    1. Frame data points as temporal travelers
+                    2. Present correlations as quantum entanglements
+                    3. Describe clusters as convergence points
+                    4. Maintain scientific accuracy while being creative
+                    
+                    Use the existing quantum template format:
+                    {insights['quantum_template']}"""
+                }
+            ]
+        }
+        
+        return technical_analysis, creative_prompt
 
     
     def _make_api_call(self, prompt):
@@ -363,145 +440,18 @@ class DataAnalyzer:
         
         return response
     
-    def analyze_distributions(self):
-        """
-        Analyze and visualize distributions of numeric columns.
-        
-        Returns:
-            str: Path to saved visualization
-        """
-        numeric_df = self.df.select_dtypes(include=['float64', 'int64'])
-        if len(numeric_df.columns) == 0:
-            return None
-        
-        # Create subplots for each numeric column
-        n_cols = len(numeric_df.columns)
-        fig, axes = plt.subplots(nrows=(n_cols+1)//2, ncols=2, figsize=(15, 4*((n_cols+1)//2)))
-        axes = axes.flatten()
-        
-        for idx, col in enumerate(numeric_df.columns):
-            # Combine histogram and KDE plot
-            sns.histplot(data=numeric_df[col].dropna(), kde=True, ax=axes[idx])
-            axes[idx].set_title(f'Distribution of {col}')
-            axes[idx].set_xlabel(col)
-            axes[idx].set_ylabel('Count')
-        
-        # Remove empty subplots if odd number of columns
-        if n_cols % 2 != 0:
-            fig.delaxes(axes[-1])
-        
-        plt.tight_layout()
-        dist_path = os.path.join(self.output_dir, 'distribution_analysis.png')
-        plt.savefig(dist_path)
-        plt.close()
-        
-        return dist_path
-    
-    def analyze_temporal_patterns(self):
-        """
-        Analyze and visualize temporal patterns if date columns exist.
-        
-        Returns:
-            str: Path to saved visualization
-        """
-        # Find date columns
-        date_cols = []
-        for col in self.df.columns:
-            try:
-                pd.to_datetime(self.df[col])
-                date_cols.append(col)
-            except:
-                continue
-        
-        if not date_cols:
-            return None
-        
-        # Select first date column and numeric columns
-        date_col = date_cols[0]
-        numeric_cols = self.df.select_dtypes(include=['float64', 'int64']).columns
-        
-        if len(numeric_cols) == 0:
-            return None
-        
-        # Create time series plot
-        plt.figure(figsize=(12, 6))
-        df_temp = self.df.copy()
-        df_temp[date_col] = pd.to_datetime(df_temp[date_col])
-        
-        # Plot time series for up to 3 numeric columns
-        for col in numeric_cols[:3]:
-            df_temp.groupby(df_temp[date_col].dt.to_period('M'))[col].mean().plot(label=col)
-        
-        plt.title('Temporal Patterns Analysis')
-        plt.xlabel('Time')
-        plt.ylabel('Average Value')
-        plt.legend()
-        plt.grid(True)
-        
-        time_path = os.path.join(self.output_dir, 'temporal_analysis.png')
-        plt.savefig(time_path)
-        plt.close()
-        
-        return time_path
-    
-    def analyze_categorical_patterns(self):
-        """
-        Analyze and visualize patterns in categorical columns.
-        
-        Returns:
-            str: Path to saved visualization
-        """
-        cat_cols = self.df.select_dtypes(include=['object', 'category']).columns
-        if len(cat_cols) == 0:
-            return None
-        
-        # Select top 6 categorical columns (if more exist)
-        plot_cols = cat_cols[:6]
-        n_cols = len(plot_cols)
-        
-        # Create subplots
-        fig, axes = plt.subplots(nrows=(n_cols+1)//2, ncols=2, 
-                                figsize=(15, 4*((n_cols+1)//2)))
-        if n_cols == 1:
-            axes = [axes]
-        else:
-            axes = axes.flatten()
-        
-        for idx, col in enumerate(plot_cols):
-            # Get value counts and plot
-            value_counts = self.df[col].value_counts()
-            sns.barplot(x=value_counts.values[:10], 
-                       y=value_counts.index[:10], 
-                       ax=axes[idx])
-            axes[idx].set_title(f'Top 10 Values in {col}')
-            axes[idx].set_xlabel('Count')
-        
-        # Remove empty subplots
-        if n_cols % 2 != 0:
-            fig.delaxes(axes[-1])
-        
-        plt.tight_layout()
-        cat_path = os.path.join(self.output_dir, 'categorical_analysis.png')
-        plt.savefig(cat_path)
-        plt.close()
-        
-        return cat_path
-    
     def visualize_statistics(self):
         """
         Create statistical summary visualizations including box plots
-        and violin plots for numeric columns.
-        
-        Returns:
-            str: Path to saved visualization
+        and violin plots for numeric columns, optimized for small images.
         """
         numeric_df = self.df.select_dtypes(include=['float64', 'int64'])
         if len(numeric_df.columns) == 0:
             return None
         
-        # Create figure with two rows: box plots and violin plots
+        # Create figure with two rows: box plots and violin plots, optimized for 512x512 px
         fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, 
-                                      figsize=(12, 8))
+                                      figsize=(6.4, 6.4))  # 6.4 inches = 512 pixels at 80 DPI
         
         # Box plots
         sns.boxplot(data=numeric_df, ax=ax1)
@@ -514,77 +464,73 @@ class DataAnalyzer:
         ax2.tick_params(axis='x', rotation=45)
         
         plt.tight_layout()
-        stats_path = os.path.join(self.output_dir, 'statistical_summary.png')
-        plt.savefig(stats_path)
+        stats_path = os.path.join(os.path.dirname(self.readme_path), 'statistical_summary.png')
+        plt.savefig(stats_path, dpi=80, bbox_inches='tight')  # Removed quality and format parameters
         plt.close()
         
         return stats_path
     
-    def visualize_missing_data(self):
+    def analyze_categorical_patterns(self):
         """
-        Create visualization of missing data patterns.
+        Analyze and visualize patterns in categorical columns.
         
         Returns:
             str: Path to saved visualization
         """
-        # Calculate missing values
-        missing = self.df.isnull().sum()
-        missing = missing[missing > 0]
-        
-        if len(missing) == 0:
+        cat_cols = self.df.select_dtypes(include=['object', 'category']).columns
+        if len(cat_cols) == 0:
             return None
         
-        # Create missing data visualization
-        plt.figure(figsize=(10, 6))
-        sns.barplot(x=missing.values, y=missing.index)
-        plt.title('Missing Values by Column')
-        plt.xlabel('Number of Missing Values')
+        # Select top 4 categorical columns (reduced from 6 to fit better in 512x512)
+        plot_cols = cat_cols[:4]
+        n_cols = len(plot_cols)
         
-        missing_path = os.path.join(self.output_dir, 'missing_data.png')
-        plt.savefig(missing_path)
-        plt.close()
+        if n_cols == 0:
+            return None
         
-        return missing_path
-    
-    def visualize_distributions(self):
-        """
-        Create distribution plots for numeric columns.
-        """
-        numeric_df = self.df.select_dtypes(include=['float64', 'int64'])
-        if len(numeric_df.columns) == 0:
-            return
+        # Create 2x2 grid for better fit in 512x512
+        fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(6.4, 6.4))
+        axes = axes.flatten()
         
-        # Create distribution plots
-        plt.figure(figsize=(12, 6))
-        for col in numeric_df.columns:
-            sns.kdeplot(data=numeric_df[col].dropna(), label=col)
+        for idx, col in enumerate(plot_cols):
+            try:
+                # Get value counts and limit to top 5 (reduced from 10 for better readability)
+                value_counts = self.df[col].value_counts().head(5)
+                
+                if len(value_counts) > 0:
+                    sns.barplot(x=value_counts.values, 
+                              y=[str(x)[:20] for x in value_counts.index],  # Truncate to 20 chars
+                              ax=axes[idx])
+                    
+                    axes[idx].set_title(f'Top 5 in {col[:15]}...' if len(col) > 15 else f'Top 5 in {col}')
+                    axes[idx].set_xlabel('Count')
+            except Exception as e:
+                print(f"Warning: Could not plot column {col}: {str(e)}")
+                axes[idx].text(0.5, 0.5, f'Could not plot {col}',
+                             ha='center', va='center')
         
-        plt.title('Distribution of Numeric Variables')
-        plt.xlabel('Value')
-        plt.ylabel('Density')
-        plt.legend()
+        # Remove empty subplots if any
+        for idx in range(len(plot_cols), len(axes)):
+            fig.delaxes(axes[idx])
+        
         plt.tight_layout()
-        
-        plt.savefig('distribution_plot.png')
+        cat_path = os.path.join(os.path.dirname(self.readme_path), 'categorical_analysis.png')
+        plt.savefig(cat_path, dpi=80, bbox_inches='tight')
         plt.close()
+        
+        return cat_path
     
-    def visualize_statistics(self):
+    def _get_quantum_template(self):
         """
-        Create box plots and violin plots for numeric columns.
+        Returns the quantum narrative template
         """
-        numeric_df = self.df.select_dtypes(include=['float64', 'int64'])
-        if len(numeric_df.columns) == 0:
-            return
-        
-        # Create figure with box plots
-        plt.figure(figsize=(12, 6))
-        sns.boxplot(data=numeric_df)
-        plt.title('Statistical Summary of Numeric Variables')
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        
-        plt.savefig('statistical_summary.png')
-        plt.close()
+        return """
+        Temporal Reconnaissance Mission:
+        - Frame findings as quantum data journeys
+        - Describe patterns as temporal convergences
+        - Present insights as revelations across time
+        - Maintain scientific accuracy in creative narrative
+        """
 
 def main():
     if len(sys.argv) < 2:
