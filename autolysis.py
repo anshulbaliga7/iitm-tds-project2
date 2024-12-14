@@ -169,13 +169,15 @@ def generate_narrative(analysis):
 
 def main():
     import argparse
+    import os.path
 
     parser = argparse.ArgumentParser(description="Analyze datasets and generate insights.")
     parser.add_argument("file_path", help="Path to the dataset CSV file.")
-    parser.add_argument("-o", "--output_dir", default="output", help="Directory to save outputs.")
     args = parser.parse_args()
 
-    os.makedirs(args.output_dir, exist_ok=True)
+    # Create output directory based on the dataset name
+    output_dir = os.path.splitext(os.path.basename(args.file_path))[0]  # Extract dataset name
+    os.makedirs(output_dir, exist_ok=True)
 
     # Load data
     df = load_data(args.file_path)
@@ -184,13 +186,13 @@ def main():
     analysis = analyze_data(df)
 
     # Visualize data
-    visualize_data(df, args.output_dir, max_plots=4)
+    visualize_data(df, output_dir, max_plots=4)
 
     # Generate narrative
     narrative = generate_narrative(analysis)
 
     # Save narrative
-    with open(os.path.join(args.output_dir, 'README.md'), 'w') as f:
+    with open(os.path.join(output_dir, 'README.md'), 'w') as f:
         f.write(narrative)
 
 if __name__ == "__main__":
