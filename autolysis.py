@@ -63,8 +63,6 @@ def analyze_data(df):
 def visualize_data(df, output_dir, max_plots=3):
     """Generate and save visualizations, limited to a maximum number of plots."""
     sns.set(style="whitegrid")
-    
-    # Visualize distributions
     numeric_columns = df.select_dtypes(include=['number']).columns[:max_plots]  # Limit to max_plots
     for column in numeric_columns:
         plt.figure()
@@ -72,23 +70,6 @@ def visualize_data(df, output_dir, max_plots=3):
         plt.title(f'Distribution of {column}')
         plt.savefig(os.path.join(output_dir, f'{column}_distribution.png'))
         plt.close()
-    
-    # Additional visualizations
-    # Box plot for outlier detection
-    for column in numeric_columns:
-        plt.figure()
-        sns.boxplot(x=df[column])
-        plt.title(f'Box Plot of {column}')
-        plt.savefig(os.path.join(output_dir, f'{column}_boxplot.png'))
-        plt.close()
-    
-    # Heatmap for correlation matrix
-    plt.figure(figsize=(10, 8))
-    correlation_matrix = df.corr()
-    sns.heatmap(correlation_matrix, annot=True, fmt=".2f", cmap='coolwarm')
-    plt.title('Correlation Heatmap')
-    plt.savefig(os.path.join(output_dir, 'correlation_heatmap.png'))
-    plt.close()
 
 def generate_narrative(analysis, df, output_dir):
     """Generate a structured and engaging narrative using LLM."""
@@ -114,9 +95,9 @@ def generate_narrative(analysis, df, output_dir):
     # Prepare insights and implications
     insights = (
         "Based on the analysis, the following insights were discovered:\n"
-        "1. **Insight One**: The average rating across the dataset is [insert average], indicating [insert interpretation].\n"
-        "2. **Insight Two**: A significant correlation of [insert correlation value] was found between [variable A] and [variable B], suggesting [insert interpretation].\n"
-        "3. **Insight Three**: The box plot analysis revealed several outliers in [insert variable], which may indicate [insert interpretation].\n"
+        "1. **Insight One**: [Describe a unique finding and its implications.]\n"
+        "2. **Insight Two**: [Discuss another interesting observation.]\n"
+        "3. **Insight Three**: [Highlight a surprising trend or anomaly.]\n"
     )
     
     implications = (
