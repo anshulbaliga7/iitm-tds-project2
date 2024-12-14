@@ -150,7 +150,19 @@ def generate_narrative(analysis):
         'Authorization': f'Bearer {AIPROXY_TOKEN}',
         'Content-Type': 'application/json'
     }
-    prompt = f"Provide a detailed analysis based on the following data summary: {analysis}"
+    prompt = (
+        "Mapping Learning Landscapes: A Journey with Anand and Carlton\n\n"
+        "## The Architects of Knowledge\n"
+        "In the intricate world of data science education, two remarkable educators, Anand and Carlton, "
+        "have been quietly shaping futures, much like data points creating a complex, interconnected narrative.\n\n"
+        "## Statistical Portraits: Beyond the Numbers\n"
+        "Visualize their teaching impact using correlation matrices and metaphorical analysis of 'knowledge transmission'. "
+        "Create charts that represent learning as a dynamic ecosystem.\n\n"
+        "## The Correlation of Curiosity\n"
+        "How do teaching styles influence student potential? Analyze 'knowledge transfer' as a complex, multi-dimensional phenomenon. "
+        "Use visualization techniques that capture the nuanced art of education.\n\n"
+        f"Provide a detailed analysis based on the following data summary: {analysis}"
+    )
     data = {
         "model": "gpt-4o-mini",
         "messages": [{"role": "user", "content": prompt}]
