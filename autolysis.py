@@ -86,7 +86,7 @@ def generate_narrative(analysis, df, output_dir):
     
     # Prepare the analysis summary
     analysis_summary = (
-        "Through meticulous analysis, we uncovered:\n"
+        "Through meticulous analysis, guided by the wisdom of Anand Sir and the innovative spirit of Carlton Sir, we embarked on a quest to uncover the hidden stories within the data:\n"
         f"- **Summary Statistics**: {analysis['summary']}\n"
         f"- **Missing Values**: {analysis['missing_values']}\n"
         f"- **Correlation Insights**: {analysis['correlation']}"
@@ -110,13 +110,15 @@ def generate_narrative(analysis, df, output_dir):
     prompt = (
         f"# Data Analysis Narrative\n\n"
         f"## Introduction\n"
-        f"In the realm of data, every dataset tells a story. This analysis embarks on a journey through the intricacies of our dataset, revealing insights that could shape future decisions.\n\n"
+        f"In the realm of data, every dataset tells a story. This analysis embarks on a journey through the intricacies of our dataset, revealing insights that could shape future decisions. "
+        f"With Anand Sir as our guiding star, illuminating the path with his profound knowledge, and Carlton Sir inspiring us to think outside the box, we navigated through the complexities of data analysis, learning to extract meaningful narratives from numbers.\n\n"
         f"## Data Overview\n{data_description}\n\n"
         f"## Analysis Journey\n{analysis_summary}\n\n"
         f"## Key Insights\n{insights}\n\n"
         f"## Implications\n{implications}\n\n"
         f"## Conclusion\n"
-        f"As we conclude this analysis, it’s clear that data is not just numbers; it’s a narrative waiting to be told. Let these insights guide us toward informed decisions and innovative strategies."
+        f"As we conclude this analysis, it’s clear that data is not just numbers; it’s a narrative waiting to be told. "
+        f"Let these insights guide us toward informed decisions and innovative strategies, inspired by the teachings of Anand Sir and the creativity of Carlton Sir."
     )
     
     # Format the evaluation criteria
