@@ -60,10 +60,10 @@ def analyze_data(df):
     }
     return analysis
 
-def visualize_data(df, output_dir):
-    """Generate and save visualizations."""
+def visualize_data(df, output_dir, max_plots=3):
+    """Generate and save visualizations, limited to a maximum number of plots."""
     sns.set(style="whitegrid")
-    numeric_columns = df.select_dtypes(include=['number']).columns
+    numeric_columns = df.select_dtypes(include=['number']).columns[:max_plots]  # Limit to max_plots
     for column in numeric_columns:
         plt.figure()
         sns.histplot(df[column].dropna(), kde=True)
@@ -111,7 +111,7 @@ def main():
     analysis = analyze_data(df)
 
     # Visualize data
-    visualize_data(df, args.output_dir)
+    visualize_data(df, args.output_dir, max_plots=3)
 
     # Generate narrative
     narrative = generate_narrative(analysis)
