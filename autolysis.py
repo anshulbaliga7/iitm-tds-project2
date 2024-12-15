@@ -150,7 +150,7 @@ def generate_narrative(analysis):
         'Authorization': f'Bearer {AIPROXY_TOKEN}',
         'Content-Type': 'application/json'
     }
-    prompt = f"Provide a detailed analysis based on the following data summary: {analysis}. The story should include my course instructors: Anand Sir and Carlton Sir, and me, Anshul."
+    prompt = f"Provide a detailed analysis based on the following data summary: {analysis}"
     data = {
         "model": "gpt-4o-mini",
         "messages": [{"role": "user", "content": prompt}]
